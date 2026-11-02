@@ -2,10 +2,10 @@
 import collections, glob, json, os, shutil, sys
 import blocks as b
 OUT = sys.argv[1]
-HOLD = {0, 1}                   # Minnesota and Florida stay on their originals until they pass review
+HOLD = set()                    # clusters listed here stay on their originals until they pass review
 G, C, Q, rep = b.clusters()
 shutil.rmtree(OUT, ignore_errors=True); os.makedirs(OUT+'/clip'); os.makedirs(OUT+'/clip8')
-for f in ('index.html', 'app.js', 'sheets.js', 'chop.png', 'favicon.png'): shutil.copy2(f'{b.SITE}/{f}', OUT)
+for f in ('index.html', '404.html', 'app.js', 'sheets.js', 'chop.png', 'favicon.png', 'og.jpg', 'robots.txt', 'sitemap.xml', '_headers'): shutil.copy2(f'{b.SITE}/{f}', OUT)
 use = {}; count = collections.Counter(); skipped = []
 for i, g in enumerate(G):
     if len(g) < 2: continue

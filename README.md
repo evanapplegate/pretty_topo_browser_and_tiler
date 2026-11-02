@@ -21,12 +21,13 @@ Tools for finding, stitching and color matching USGS orthophoto-topos: 1:24k map
 | `scripts/3_finder_and_site/` | The thumbnail color scan and the site's data and images |
 | `scripts/4_st_marys/` | The 9-sheet BigTIFF stitch and the tone-mapping library |
 | `scripts/5_canaveral/` | The same tone mapping on a water-heavy block, and the template for new blocks |
+| `scripts/6_site_tone/` | Cluster color matching for the site's map images, and the deploy step |
 
 ## What isn't here
 
 Everything heavy is left out by [`.gitignore`](.gitignore), about 21 GB in all: source sheets, clips, mosaics, PSD/PSB files, QA images, caches and the site's map images.
 
-The source sheets are public USGS downloads, and their URLs are in `topo_finder/blue_green_image_topos.csv`. To run the site, rebuild its images first with `clip_thumbs.py` and `hires.py` from `scripts/3_finder_and_site/`, which write `clip/` and `clip8/` from data already in this repo.
+The source sheets are public USGS downloads, and their URLs are in `topo_finder/blue_green_image_topos.csv`. To run the site, rebuild its images first with `clip_thumbs.py` and `hires.py` from `scripts/3_finder_and_site/`, which write `clip/` and `clip8/` from data already in this repo. The live site's color-matched versions come from `scripts/6_site_tone/`, and it deploys through `stage_deploy.py` there.
 
 Paths in the scripts are hard-coded to one machine, so expect to change them.
 

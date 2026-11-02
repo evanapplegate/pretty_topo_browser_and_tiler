@@ -6,7 +6,8 @@ for d in ('clip_tm', 'clip8_tm'): os.makedirs(f'{b.SITE}/{d}', exist_ok=True)
 G, C, Q, rep = b.clusters()
 arg = sys.argv[1]
 done = f'work/c{arg}.json'
-if os.path.exists(done): print(arg, 'skip'); sys.exit()
+wide = len(sys.argv) > 2 and sys.argv[2] == 'wide'
+if os.path.exists(done) and not wide: print(arg, 'skip'); sys.exit()
 t0 = time.time()
 def stack_out(bbox, top):
     top_s = rep(bbox); n = 0
@@ -25,7 +26,8 @@ if arg == 'rest':
 g = G[int(arg)]
 T, grid, rows, cols = b.load_block(g, C, Q, rep); base = [x['lab'] for x in T]
 raw = t.visibility(T, grid, base, off=12); rm = t.metrics(T, grid, base, base)
-L = b.match(T, grid, rows, cols); F = b.finish(base, L)
+L = b.match_wide(T, grid, rows, cols) if wide else b.match(T, grid, rows, cols)
+F = b.finish(base, L, 20 if wide else None)
 v = t.visibility(T, grid, F, off=12); m = t.metrics(T, grid, F, base)
 n = 0
 for x, f in zip(T, F):
@@ -36,5 +38,5 @@ w = 1900 if len(g) > 8 else 1000
 Image.fromarray(S).resize((w, max(1, int(w*S.shape[0]/S.shape[1]))), Image.LANCZOS).save(f'qa/c{arg}.png')
 if len(t.edges(grid)) and len(g) >= 8: t.seam_crops(T, grid, F, rows, cols, f'qa/c{arg}_seams.png', size=280)
 st = sorted({x['s']['st'] for x in T})
-r = dict(i=int(arg), sheets=len(g), editions=n, states=st, raw=round(raw['ratio'], 2), raw_worst=round(raw['ratio_worst'], 2), vis=round(v['ratio'], 2), worst=round(v['ratio_worst'], 2), land=[round(rm['land_spread'], 2), round(m['land_spread'], 2)], water=[round(rm['water_spread'], 2), round(m['water_spread'], 2)], chroma=round(m['chroma'], 3), detail=round(m['detail'], 3), sec=round(time.time()-t0))
+r = dict(i=int(arg), wide=wide, sheets=len(g), editions=n, states=st, raw=round(raw['ratio'], 2), raw_worst=round(raw['ratio_worst'], 2), vis=round(v['ratio'], 2), worst=round(v['ratio_worst'], 2), land=[round(rm['land_spread'], 2), round(m['land_spread'], 2)], water=[round(rm['water_spread'], 2), round(m['water_spread'], 2)], chroma=round(m['chroma'], 3), detail=round(m['detail'], 3), sec=round(time.time()-t0))
 json.dump(r, open(done, 'w')); print(r, flush=True)

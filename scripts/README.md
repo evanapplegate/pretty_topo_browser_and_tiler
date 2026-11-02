@@ -139,6 +139,29 @@ Run from inside this folder.
 
 Run the color build and render as separate processes. Forking after OpenCV has run threads crashes on macOS. Lessons behind these steps are under [Learnings](../NEATLINE_CROP_AND_STITCH.md#learnings).
 
+## 6_site_tone
+
+Tone maps the site's map images one connected cluster at a time. The log is in [its section](../NEATLINE_CROP_AND_STITCH.md#site-images-cluster-matching).
+
+| Order | Script | What it does |
+|---|---|---|
+| 1 | `blocks.py` | Not run directly: clusters, `match`, `match_wide`, stacked editions |
+| 2 | `cluster.py <n>` | Matches cluster `n` and writes its images; finished clusters are skipped |
+| 3 | `cluster.py rest` | Handles lone sheets and their other editions |
+| 4 | `cluster.py <n> wide` | Reruns one cluster with `match_wide` |
+| 5 | `stage_deploy.py <folder>` | Builds the deploy folder from finished clusters |
+
+`all.sh` runs everything in order, and `rerun.sh` shows a wide rerun. Each cluster runs in its own process. `test.py <n>` tries one cluster without writing images, `test_fl.py` tries part of Florida, `stage.py` scores a cluster after each step, and `og_image.py` cuts the social preview.
+
+Run from inside this folder. After changing the sheet list, delete the marker in `work/` for any cluster it affects and rerun that cluster.
+
+**Deploy through `stage_deploy.py`, not from `topo_finder/site`.** Deploying that folder directly publishes the original images plus both `_tm` folders.
+
+```bash
+python3 -W ignore stage_deploy.py /tmp/prettytopos
+npx wrangler pages deploy /tmp/prettytopos --project-name prettytopos --branch main --force
+```
+
 ## Site
 
 The site itself is in `../topo_finder/site`. To run it locally:

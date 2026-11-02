@@ -236,7 +236,7 @@ def gblur(a, s):
     b = cv2.GaussianBlur(sm, (0, 0), s/f, borderType=cv2.BORDER_REFLECT)
     return cv2.resize(b, (a.shape[1], a.shape[0]), interpolation=cv2.INTER_CUBIC) if f > 1 else b
 
-def dodge(T, base, labs, rows, cols, sigma=180, alpha=(.8, .6, .7, .4), target=None):
+def dodge(T, base, labs, rows, cols, sigma=180, alpha=(.8, .6, .7, .4), target=None, over=None):
     # Local tone mapping per class: even out each class's slow drift across the mosaic, leaving real detail alone.
     h, w = labs[0].shape[:2]
     K = canvas(T, [classify(b) for b in labs], rows, cols)[..., 0]             # classify the current estimate, because raw colours differ by sheet
@@ -252,6 +252,7 @@ def dodge(T, base, labs, rows, cols, sigma=180, alpha=(.8, .6, .7, .4), target=N
         num = np.stack([gblur(C[..., c]*m, sigma) for c in range(3)], -1)
         mu = num/np.maximum(den, 1e-4)[..., None]
         tau = target[name] if target else np.array([np.median(C[..., c][K == i]) for c in range(3)], np.float32)
+        if over and name in over: tau = np.array(over[name], np.float32)
         targets[name] = tau
         ok = np.clip(den/.02, 0, 1)[..., None]                          # fade out where a class is barely present
         d = (tau-mu)*alpha[i]*ok
@@ -460,13 +461,14 @@ def finish(T, grid, base, L, order=3, lam=.005, chroma=.965):
     return out
 
 
-def ink_guard(src, out, sig=12):
+def ink_guard(src, out, sig=12, warm_area=None):
     # Printed inks keep their colour. Thin blue lines are found by being bluer than their surroundings, so flat ocean tints stay matched;
     # they take the shift of the water around them. Warm inks (sand, roads, town tint) keep their original hue outright.
     s = cv2.GaussianBlur(src, (0, 0), .7)
     bg = cv2.GaussianBlur(src[..., 2], (0, 0), sig)
     blue = np.maximum(smooth(bg-s[..., 2], .008, .022), smooth(-s[..., 2], .028, .05))
     warm = smooth(s[..., 1], -.012, .004)*smooth(np.hypot(s[..., 1], s[..., 2]), .03, .06)
+    if warm_area: warm = warm*(1-smooth(cv2.GaussianBlur(warm, (0, 0), warm_area), .3, .6))     # large warm areas are land, not ink
     d = out[..., 1:]-src[..., 1:]
     shift = np.stack([cv2.GaussianBlur(d[..., c], (0, 0), sig) for c in range(2)], -1)
     o = out.copy()

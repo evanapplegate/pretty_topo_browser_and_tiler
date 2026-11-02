@@ -55,8 +55,8 @@ def match(T, grid, rows, cols, node=12, along=15, water=True, chroma=.965):
     if water: L = t.water_pass(T, grid, L, along=along, node=node)
     return L
 
-def finish(base, L):
-    return [t.gamut_map(t.ink_guard(b, l, 6)) for b, l in zip(base, L)]
+def finish(base, L, warm_area=None):
+    return [t.gamut_map(t.ink_guard(b, l, 6, warm_area)) for b, l in zip(base, L)]
 
 def to_rgb(l):
     return (np.clip(t.oklab2rgb(l), 0, 1)*255+.5).astype(np.uint8)
@@ -80,3 +80,62 @@ def save(s, lab):
 
 def load_lab(s):
     return t.rgb2oklab(np.asarray(Image.open(f"{SITE}/clip8/{s['scan']}.jpg").convert('RGB'), np.float32)/255).astype(np.float32)
+
+_classify = t.classify
+def classify_wide(lab):
+    # The St Marys classes, plus dark blue water, which they leave out because they were tuned on pale water.
+    k = _classify(lab)
+    s = cv2.GaussianBlur(lab, (0, 0), 3)
+    k[(s[..., 2] < -.02) & (s[..., 1] < .012) & (s[..., 0] >= .25)] = 3
+    return k
+
+def open_water(L, cover=.4):
+    # The colour of sheets that really are mostly water, so marsh tints inland can't drag the water target toward teal.
+    K = [t.classify(l) for l in L]
+    m = [np.median(l[k == 3], axis=0) for l, k in zip(L, K) if (k == 3).mean() >= cover]
+    return np.median(np.array(m), axis=0) if len(m) >= 3 else None
+
+def level_sheets(T, L, strength=.85, cover=.03, soft=3, water=None):
+    # Shift each sheet's classes toward the cluster's typical values. This acts on whole sheets, so it stays sharp at seams, where evening's wide blur can't reach.
+    K = [t.classify(l) for l in L]; meds = {}
+    for i in range(len(t.CLASSES)):
+        meds[i] = {j: np.median(L[j][K[j] == i], axis=0) for j in range(len(L)) if (K[j] == i).mean() >= cover}
+    out = []
+    for j, l in enumerate(L):
+        o = l.copy()
+        for i, m in meds.items():
+            if j not in m or len(m) < 3: continue
+            tau = np.median(np.array(list(m.values())), axis=0)
+            if i == 3 and water is not None: tau = water
+            w = cv2.GaussianBlur((K[j] == i).astype(np.float32), (0, 0), soft)
+            o += (tau-m[j])[None, None]*strength*w[..., None]
+        out.append(o)
+    return out
+
+def match_wide(T, grid, rows, cols, node=12, along=15, level=True, wide=((.30, .16), (.30, .16), (.16, .09))):
+    # For clusters with big sheet-to-sheet jumps: level whole sheets first, then let early seam rounds accept pairs that disagree a lot.
+    base = [x['lab'] for x in T]; al = (.8, .6, .7, .4)
+    t.classify = classify_wide
+    M = t.fit_global(T, grid, order=3, lam=.005, sigma=2, depths=(2, 5, 9, 15), step=2)
+    L = [t.apply_global(x, m, 3) for x, m in zip(base, M)]
+    w = open_water(L)
+    over = {'water': w} if w is not None else None
+    if level: L = level_sheets(T, L, water=w)
+    for sg in (130, 90, 60):
+        L, _, _ = t.dodge(T, base, L, rows, cols, sigma=sg, alpha=al, over=over)
+    for lim in wide:
+        F = t.fit_bilateral(T, grid, L, along=along, node=node, limits=lim)
+        L = [t.apply_bilateral(a, f) for a, f in zip(L, F)]
+    for _ in range(2):
+        F = t.fit_bilateral(T, grid, L, along=along, node=node)
+        L = [t.apply_bilateral(a, f) for a, f in zip(L, F)]
+    L, _, _ = t.dodge(T, base, L, rows, cols, sigma=45, alpha=tuple(v*.5 for v in al), over=over)
+    for _ in range(4):
+        F = t.fit_bilateral(T, grid, L, along=along, node=node)
+        L = [t.apply_bilateral(a, f) for a, f in zip(L, F)]
+    L = t.water_pass(T, grid, L, along=along, node=node)
+    t.classify = _classify
+    mean_c = lambda X: float(np.mean([np.hypot(x[..., 1], x[..., 2]).mean() for x in X]))
+    s = float(np.clip(mean_c(base)/mean_c(L), .94, 1.12))                      # return to the cluster's own saturation, rather than a fixed trim
+    for x in L: x[..., 1:] *= s
+    return L

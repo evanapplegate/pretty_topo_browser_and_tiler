@@ -1,15 +1,16 @@
 # Neatline cropping and stitching USGS topos
 
-How the Cape Canaveral, Louisiana, NW Florida and St Marys GeoTIFFs were clipped at their printed neatlines, joined into seamless mosaics and color matched.
+How the Cape Canaveral, Louisiana, NW Florida and St Marys GeoTIFFs were clipped at their printed neatlines, joined into seamless mosaics and color matched, and how the same tone mapping was run across the site's map images.
 
 The scripts are in [scripts/](scripts/README.md), with the run order.
 
 - **Method:** the steps from raw sheet to mosaic, starting at [Why a plain clip doesn't work](#why-a-plain-clip-doesnt-work).
 - **[St Marys block](#st-marys-block-stitch-and-tone-match):** a full log of the 9-sheet stitch and tone match, including what failed.
 - **[Cape Canaveral tone match](#cape-canaveral-tone-match):** the same method on a water-heavy block, and what had to change.
+- **[Site images](#site-images-cluster-matching):** the same tone mapping across 880 map images, one connected cluster at a time.
 - **[Learnings](#learnings):** what carries over to the next block.
 - **[Earlier color matching](#earlier-color-matching):** the Selective Color work on the first three sets.
-- **[Appendix](#appendix-scripts):** the St Marys and Canaveral scripts in full.
+- **[Appendix](#appendix-scripts):** the St Marys, Canaveral and site-image scripts in full.
 
 The short version: don't clip to the coordinates the metadata gives you. Measure where the neatline was actually printed on each scan, warp each sheet so that line lands exactly on the quad edge, and resample every sheet onto one shared grid so seams fall on pixel boundaries.
 
@@ -176,7 +177,7 @@ These offsets are in the original printing and scanning: adjacent sheets were no
 
 ## The website's versions
 
-The Orthophoto-topos site uses a lighter method for its 881 sheets, because it can't afford to read every full scan:
+The Orthophoto-topos site uses a lighter method for its 880 sheets, because it can't afford to read every full scan:
 
 1. Read only the header of each remote GeoTIFF to get its size and georeferencing.
 2. Compute where the quad's four corners fall in the image.
@@ -188,6 +189,8 @@ The Orthophoto-topos site uses a lighter method for its 881 sheets, because it c
 | Sharp | The GeoTIFF's 1/8 overview | 740 × 850 px |
 
 This relies on the georeferencing alone, with no neatline measurement. That's accurate enough here: the 5 px error at full resolution is under 1 px at 1/8.
+
+These images were later color matched. See [Site images](#site-images-cluster-matching).
 
 ## St Marys block: stitch and tone match
 
@@ -535,6 +538,93 @@ python3 -W ignore render_block.py
 
 Then build each mosaic with `gdalbuildvrt` and `gdal_translate` as in the St Marys commands, from `lossless/` to `..._mosaic_lossless.tif` and from `matched/` to `..._mosaic_tonemapped.tif`, and run `python3 -W ignore verify.py`.
 
+## Site images: cluster matching
+
+The site's map images were matched with the same tone mapping, one connected cluster at a time, so each region keeps its own look instead of the whole country being forced toward one color. 833 of the 880 sheets are matched. The other 47 keep their original color.
+
+### Clusters
+
+- **Grouping:** quads that share an edge form a cluster. The site has 650 quads, 632 of them standard 7.5' cells, which fall into 47 groups: 18 with two or more sheets and 29 lone sheets. The largest are 208 in Minnesota and 131 in the Florida peninsula and Keys.
+- **Top sheet:** each quad is represented by the sheet the site shows by default, the earliest year, then the closest color match.
+- **Stacked editions:** the other 230 editions follow their top sheet through `match_edition`: a cubic tone fit to its final color, plus slow drift capped at 0.08 so changed land and labels don't print through.
+- **Left alone:** lone sheets and the 18 non-standard quads have no seams to fix, so they keep their color. Their other editions still follow them.
+
+### Input
+
+These are the site's 740 × 850 clipped images, about 1/8 of full resolution, read from JPEG. Distances in the chain are half the St Marys values, which ran at 1/4 scale: evening at sigma 130, 90, 60 and 45, seam window 15, node spacing 12. Output is JPEG quality 88.
+
+### Two methods
+
+`match` is the St Marys and Canaveral chain at this scale, and it was enough for most clusters. `match_wide` was added for clusters with big jumps between sheets, and was used on Florida's 131 sheets, Louisiana's 39 and 5, North Carolina's 16 and Virginia's 6.
+
+| Addition in `match_wide` | Why |
+|---|---|
+| Dark blue water counts as water | The class rules were tuned on pale water, so dark tints skipped evening |
+| `level_sheets` moves each sheet's class medians 85% toward the cluster's | Evening's wide blur can't fix a step exactly at a seam; a whole-sheet shift can |
+| Early seam rounds accept wide pairs: (0.30, 0.16) twice, then (0.16, 0.09) | The strict limits rejected the seams that most needed fixing |
+| `open_water` sets the water target from sheets at least 40% water | Marsh tints inland were dragging the target toward teal |
+| `warm_area` limits the warm ink guard to small features | Large orange Everglades areas are land, not printed ink |
+| Saturation returns to the cluster's own level, within 0.94 to 1.12 | The fixed 0.965 trim was tuned on St Marys and could overshoot |
+
+### Solver
+
+Direct solves stop being practical at this size, so above 450,000 unknowns per color the seam solve uses conjugate gradients with a diagonal preconditioner and a tolerance of 0.002. The Minnesota cluster reaches about 6.6 million unknowns per color. That makes each solve approximate, which is a reasonable trade for a smooth correction field, but it hasn't been compared against an exact solve.
+
+### Results
+
+Scored on the images at this scale, at control lines 12 pixels inside each sheet. Land and water are spread between sheets, before to after, in OKLab × 100.
+
+| States | Sheets | Editions | Visibility raw | Worst raw | Visibility | Worst | Land | Water | Chroma | Method | Time |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| MN | 208 | 6 | 2.25 | 18.95 | 0.91 | 2.46 | 5.45 to 3.43 | 4.55 to 3.28 | 0.974 | base | 682 s |
+| FL | 131 | 85 | 3.29 | 17.53 | 0.77 | 1.24 | 7.93 to 4.87 | 6.99 to 2.87 | 1.032 | wide | 538 s |
+| FL | 43 | 24 | 2.96 | 19.22 | 0.82 | 1.32 | 5.21 to 2.58 | 7.38 to 2.97 | 0.992 | base | 173 s |
+| LA | 39 | 9 | 3.18 | 12.00 | 0.74 | 1.08 | 5.57 to 2.51 | 2.88 to 0.91 | 1.009 | wide | 158 s |
+| FL, GA, SC | 36 | 30 | 2.65 | 8.83 | 0.83 | 1.25 | 6.04 to 2.76 | 3.15 to 1.63 | 0.993 | base | 158 s |
+| LA | 29 | 15 | 2.49 | 19.49 | 0.88 | 1.26 | 5.98 to 3.54 | 4.86 to 3.64 | 1.016 | base | 130 s |
+| MD | 25 | 12 | 3.07 | 8.74 | 0.84 | 1.50 | 5.11 to 2.49 | 6.91 to 2.04 | 1.009 | base | 80 s |
+| NC | 16 | 5 | 4.18 | 8.94 | 0.66 | 0.85 | 5.07 to 2.85 | 4.00 to 0.51 | 1.013 | wide | 64 s |
+| FL, GA | 14 | 5 | 2.77 | 6.84 | 0.79 | 1.08 | 4.00 to 3.14 | 2.55 to 4.14 | 0.982 | base | 328 s |
+| TX | 13 | 2 | 3.66 | 14.12 | 0.81 | 1.15 | 5.52 to 0.98 | 3.10 to 1.21 | 0.983 | base | 239 s |
+| GA | 11 | 0 | 2.23 | 4.23 | 0.88 | 1.14 | 5.97 to 1.58 | 2.50 to 2.88 | 0.982 | base | 226 s |
+| NC | 11 | 9 | 1.84 | 2.73 | 0.93 | 1.20 | 5.52 to 3.01 | 6.23 to 3.20 | 0.956 | base | 222 s |
+| VA | 6 | 4 | 4.47 | 9.71 | 0.72 | 0.98 | 5.65 to 1.56 | none | 1.007 | wide | 161 s |
+| FL | 6 | 4 | 3.23 | 5.15 | 0.77 | 0.99 | 3.96 to 1.49 | 2.08 to 0.68 | 0.994 | base | 101 s |
+| LA | 5 | 4 | 1.41 | 1.75 | 0.71 | 0.89 | 2.77 to 1.38 | 5.55 to 2.05 | 0.956 | wide | 146 s |
+| FL | 4 | 4 | 4.62 | 11.02 | 0.87 | 0.94 | 4.22 to 2.77 | 7.94 to 1.01 | 0.959 | base | 56 s |
+| LA | 4 | 2 | 1.66 | 2.32 | 0.67 | 0.72 | 4.61 to 1.37 | 2.20 to 0.73 | 0.948 | base | 56 s |
+| MO | 2 | 0 | 1.51 | 1.51 | 1.16 | 1.16 | 5.30 to 2.05 | none | 0.975 | base | 23 s |
+
+Times are from a shared machine with other clusters running, so they aren't comparable. The 220 stacked editions in these clusters are included in the times.
+
+### What broke
+
+- **Empty grid cells counted as forest.** A block's canvas includes empty cells, whose zeros classified as dark forest. Evening then chased a huge false forest area, and the first Georgia test came out at chroma 0.455 with land spread up from 6 to 9. Empty cells are now excluded.
+- **A class missing from a whole cluster.** An empty median gave NaN, which spread through every sheet and crashed the solver. Two-sheet clusters with no water also crashed the metrics. Both are guarded now.
+- **A line map beside an image map.** Fitchburg and Shirley, MA can't match, and forcing them put dark rings around lakes. Shirley was a false positive and was struck, leaving Fitchburg alone at its original color. A very low chroma score flagged this pair: 0.827.
+- **Dark smudges on North Carolina water.** The first run left them along the Outer Banks, with a worst seam of 3.47. The wide method cleared them: 0.85.
+- **Hard seams in Florida.** The first run reached only 1.19, worst 5.36, with dark blue water against pale at Sandy Key / East Bahia. Testing the wide method on the worst 60 sheets took 3 minutes and went from 4.02 to 0.79, worst 1.74. Full cluster: 0.78, worst 1.26.
+- **Orange Everglades.** Seams stayed in orange land because the ink guard kept its original hue. `warm_area` fixed it.
+- **Mint Keys.** Florida's water came out teal, because inland marsh tints shared the water target. `open_water` gave a bluer result, with water spread down from 3.16 to 2.87 and seams about the same at 0.77.
+
+### Deploying
+
+`site/clip/` and `site/clip8/` keep the originals, and matched images are in `site/clip_tm/` and `site/clip8_tm/`, which aren't in git. `stage_deploy.py` builds a deploy folder using the original file names, so `app.js` doesn't need to know. It only takes a cluster's images once that cluster's marker file exists, so a half-written run can't go live, and `HOLD` keeps a cluster back for review.
+
+Don't deploy `topo_finder/site` directly. That would publish the originals plus both `_tm` folders.
+
+### Known limits
+
+- **Review:** clusters were judged from overviews and the worst seam crops, not at 1:1 across all 880 images. Stacked editions weren't reviewed by eye.
+- **Lake Okeechobee area:** still somewhat blocky, and it's not settled how much of that is sheet differences and how much is real farmland.
+- **Minnesota:** Red Lake is slightly blotchy, and there's a flat sage patch north of it. It ran on the base method, and the wide method wasn't tried.
+- **Water spread rose in two clusters:** Florida and Georgia's 14 sheets (2.55 to 4.14) and Georgia's 11 (2.50 to 2.88), where seam fixes took priority over sheet averages.
+- **Missouri:** the two-sheet cluster only reached 1.16.
+- **Saturation:** the base method's fixed trim left some small clusters at 0.95 to 0.96. Only `match_wide` restores saturation.
+- **Contact sheet:** the thumbs on the right are still the original USGS previews, so they don't match the map's colors.
+- **Low-zoom outlines:** these still use each sheet's original average color. They fade out by zoom 6.
+- **JPEG:** these images are compressed twice, from quality 84 to 88.
+
 ## Learnings
 
 What carries over to the next block.
@@ -547,7 +637,10 @@ What carries over to the next block.
 - **Don't let a classifier feed on its own output.** Reclassifying each pass is needed because raw colors differ by sheet, but it can run away, so pin what the raw image makes certain.
 - **Keep evening broad.** Sigma 60 (about 490 m) scored best and erased real landscape. Sigma 90 and up was the limit here.
 - **Printed inks aren't terrain.** Sand, roads, town tint and blue lines need protecting, or land corrections quietly grey and muddy them. On Canaveral the blue test also catches 26% to 93% of pixels per sheet, which was harmless (visibility 1.02 to 1.03) only because it keeps the local shift rather than the raw color.
-- **Trim saturation last.** Matching adds some, and a uniform scale of 0.965 brought it back near the original.
+- **Return saturation to the block's own level.** Matching adds some on some blocks and removes it on others, so a fixed trim of 0.965 only suited St Marys. Measure it and scale back within limits.
+- **Big jumps need a whole-sheet step first.** Blurred evening can't fix a step exactly at a seam, and strict pair limits reject the worst seams outright. Level whole sheets, then let early seam rounds accept large differences and tighten them after.
+- **Take a class's target from where it's pure.** Averaging water across a block let marsh tints turn the Keys mint. Sheets that are mostly water give the real color.
+- **A failed match can mean a wrong sheet.** Fitchburg and Shirley couldn't match because one was a line map. When a cluster's chroma collapses, look at the sheets before tuning.
 
 ### Checking
 
@@ -561,9 +654,12 @@ What carries over to the next block.
 ### Process
 
 - **On a new block, run the settings unchanged first.** It shows exactly what breaks. Canaveral needed one addition, not a retune.
+- **Empty cells are data.** A canvas with holes feeds zeros into every statistic unless they're masked. Check a new block's first numbers for anything impossible: chroma of 0.455 was the giveaway.
+- **Test the fix on the worst part.** A 60-sheet Florida test took 3 minutes and proved the method before a 10-minute full run.
+- **Mark a cluster finished only once it's written.** Staged deploys can then ship what's ready while the rest is still running, with no half-written cluster going live.
 - **Keep lossless clips somewhere durable.** Canaveral's sources were gone, and its lossless clips survived only by luck in a temp folder. Tone mapping JPEG clips would compress everything twice.
 - **Never fork after OpenCV has run threads.** On macOS the workers segfault in `cv2.resize` and the pool hangs, with a crash dialog for each worker. Run the color build and the render as separate processes.
-- **Plan solver size.** A direct seam solve took 10 to 20 seconds per round at about 185,000 unknowns per color channel. A 32-sheet block at the same grid would reach about 1,000,000, which is untested, so it probably needs an iterative solver or a coarser grid.
+- **Plan solver size.** A direct seam solve took 10 to 20 seconds per round at about 185,000 unknowns per color. Beyond about 450,000, conjugate gradients handled up to 6.6 million, at the cost of an approximate answer.
 - **zsh doesn't split variables into words.** Options stored in a variable reach `gdal_translate` as one argument, so write them out.
 - **A stopped command may have partly run.** One reported as rejected had already moved a folder, committed and created a GitHub repo. Check the disk and the remote before redoing anything.
 - **Check the account before publishing.** Wrangler here was logged in to a work account while the personal Pages project lived elsewhere.
@@ -978,7 +1074,7 @@ def gblur(a, s):
     b = cv2.GaussianBlur(sm, (0, 0), s/f, borderType=cv2.BORDER_REFLECT)
     return cv2.resize(b, (a.shape[1], a.shape[0]), interpolation=cv2.INTER_CUBIC) if f > 1 else b
 
-def dodge(T, base, labs, rows, cols, sigma=180, alpha=(.8, .6, .7, .4), target=None):
+def dodge(T, base, labs, rows, cols, sigma=180, alpha=(.8, .6, .7, .4), target=None, over=None):
     # Local tone mapping per class: even out each class's slow drift across the mosaic, leaving real detail alone.
     h, w = labs[0].shape[:2]
     K = canvas(T, [classify(b) for b in labs], rows, cols)[..., 0]             # classify the current estimate, because raw colours differ by sheet
@@ -994,6 +1090,7 @@ def dodge(T, base, labs, rows, cols, sigma=180, alpha=(.8, .6, .7, .4), target=N
         num = np.stack([gblur(C[..., c]*m, sigma) for c in range(3)], -1)
         mu = num/np.maximum(den, 1e-4)[..., None]
         tau = target[name] if target else np.array([np.median(C[..., c][K == i]) for c in range(3)], np.float32)
+        if over and name in over: tau = np.array(over[name], np.float32)
         targets[name] = tau
         ok = np.clip(den/.02, 0, 1)[..., None]                          # fade out where a class is barely present
         d = (tau-mu)*alpha[i]*ok
@@ -1202,13 +1299,14 @@ def finish(T, grid, base, L, order=3, lam=.005, chroma=.965):
     return out
 
 
-def ink_guard(src, out, sig=12):
+def ink_guard(src, out, sig=12, warm_area=None):
     # Printed inks keep their colour. Thin blue lines are found by being bluer than their surroundings, so flat ocean tints stay matched;
     # they take the shift of the water around them. Warm inks (sand, roads, town tint) keep their original hue outright.
     s = cv2.GaussianBlur(src, (0, 0), .7)
     bg = cv2.GaussianBlur(src[..., 2], (0, 0), sig)
     blue = np.maximum(smooth(bg-s[..., 2], .008, .022), smooth(-s[..., 2], .028, .05))
     warm = smooth(s[..., 1], -.012, .004)*smooth(np.hypot(s[..., 1], s[..., 2]), .03, .06)
+    if warm_area: warm = warm*(1-smooth(cv2.GaussianBlur(warm, (0, 0), warm_area), .3, .6))     # large warm areas are land, not ink
     d = out[..., 1:]-src[..., 1:]
     shift = np.stack([cv2.GaussianBlur(d[..., c], (0, 0), sig) for c in range(2)], -1)
     o = out.copy()
@@ -1528,4 +1626,240 @@ O.save('qa/final_native.png')
 ra = np.moveaxis(a.read(out_shape=(3, 1704, 1006), resampling=Resampling.average), 0, -1); rb = np.moveaxis(b.read(out_shape=(3, 1704, 1006), resampling=Resampling.average), 0, -1)
 S2 = np.full((1704, 2032, 3), 255, np.uint8); S2[:, :1006] = ra; S2[:, -1006:] = rb
 Image.fromarray(S2).save(cfg.DATA+'/before_after.png')
+```
+
+### 6_site_tone/blocks.py
+
+Clusters, both match methods, stacked editions and image writing.
+
+```python
+# Tone match the site's map images one connected cluster at a time, so each region keeps its own look.
+import collections, json, os, sys
+import cv2, numpy as np
+from PIL import Image
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE+'/../4_st_marys')
+import tone as t
+SITE = os.path.abspath(HERE+'/../../topo_finder/site')
+R = json.load(open(HERE+'/../3_finder_and_site/site_rows.json'))
+OW, OH = 740, 850
+
+def clusters():
+    # Quads sharing an edge form a cluster. The shown sheet in each quad is the site's default: earliest year, then closest match.
+    Q = collections.defaultdict(list)
+    for r in R: Q[tuple(r['bbox'])].append(r)
+    std = lambda b: abs(b[2]-b[0]-.125) < .01 and abs(b[3]-b[1]-.125) < .01
+    cell = lambda b: (-round(b[3]/.125), round(b[0]/.125))
+    C = {cell(b): b for b in Q if std(b)}
+    seen = set(); out = []
+    for c in C:
+        if c in seen: continue
+        st = [c]; seen.add(c); g = []
+        while st:
+            x = st.pop(); g.append(x)
+            for d in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                n = (x[0]+d[0], x[1]+d[1])
+                if n in C and n not in seen: seen.add(n); st.append(n)
+        out.append(g)
+    out.sort(key=len, reverse=True)
+    rep = lambda b: min(Q[b], key=lambda s: (s['yr'], s['dist']))
+    return out, C, Q, rep
+
+def load_block(g, C, Q, rep):
+    r0 = min(c[0] for c in g); c0 = min(c[1] for c in g)
+    rows = max(c[0] for c in g)-r0+1; cols = max(c[1] for c in g)-c0+1
+    T = []; grid = {}
+    for c in g:
+        s = rep(C[c]); f = f"{SITE}/clip8/{s['scan']}.jpg"
+        a = np.asarray(Image.open(f).convert('RGB'), np.float32)/255
+        x = dict(s=s, f=f, lab=t.rgb2oklab(a).astype(np.float32), rc=(c[0]-r0, c[1]-c0))
+        T.append(x); grid[x['rc']] = x
+    return T, grid, rows, cols
+
+def match(T, grid, rows, cols, node=12, along=15, water=True, chroma=.965):
+    # The St Marys and Canaveral chain with every distance halved, because these images are half the scale that pipeline was tuned on.
+    base = [x['lab'] for x in T]; al = (.8, .6, .7, .4)
+    M = t.fit_global(T, grid, order=3, lam=.005, sigma=2, depths=(2, 5, 9, 15), step=2)
+    L = [t.apply_global(x, m, 3) for x, m in zip(base, M)]
+    for sg, a, rounds in ((130, al, 0), (90, al, 0), (60, al, 3), (45, tuple(v*.5 for v in al), 4)):
+        L, _, _ = t.dodge(T, base, L, rows, cols, sigma=sg, alpha=a)
+        for _ in range(rounds):
+            F = t.fit_bilateral(T, grid, L, along=along, node=node)
+            L = [t.apply_bilateral(a_, f) for a_, f in zip(L, F)]
+    L = t.trim(L, chroma)
+    if water: L = t.water_pass(T, grid, L, along=along, node=node)
+    return L
+
+def finish(base, L, warm_area=None):
+    return [t.gamut_map(t.ink_guard(b, l, 6, warm_area)) for b, l in zip(base, L)]
+
+def to_rgb(l):
+    return (np.clip(t.oklab2rgb(l), 0, 1)*255+.5).astype(np.uint8)
+
+def match_edition(e, target, order=3, rounds=6, sigma=60, cap=.08):
+    # Another edition of the same quad: fit its tones to the sheet shown on top, then remove slow drift. The cap stops changed land and labels printing through.
+    s = cv2.GaussianBlur(e, (0, 0), 2)[::3, ::3].reshape(-1, 3); d = cv2.GaussianBlur(target, (0, 0), 2)[::3, ::3].reshape(-1, 3)
+    F = t.phi(s, order); w = np.ones(len(F))
+    for _ in range(rounds):
+        M = np.linalg.lstsq(F*w[:, None], d*w[:, None], rcond=None)[0]
+        w = np.sqrt(1/np.maximum(np.linalg.norm(F@M-d, axis=1), .012))
+    o = t.apply_global(e, M, order)
+    return o+t.gblur(np.clip(target-o, -cap, cap), sigma)
+
+def save(s, lab):
+    # Write the map image and its small copy; the rename means a stopped run never leaves half a file.
+    rgb = to_rgb(lab)
+    for d, im, q in (('clip8_tm', rgb, 88), ('clip_tm', cv2.resize(rgb, (170, 195), interpolation=cv2.INTER_AREA), 88)):
+        p = f"{SITE}/{d}/{s['scan']}.jpg"
+        Image.fromarray(im).save(p+'.tmp', 'JPEG', quality=q, optimize=True); os.replace(p+'.tmp', p)
+
+def load_lab(s):
+    return t.rgb2oklab(np.asarray(Image.open(f"{SITE}/clip8/{s['scan']}.jpg").convert('RGB'), np.float32)/255).astype(np.float32)
+
+_classify = t.classify
+def classify_wide(lab):
+    # The St Marys classes, plus dark blue water, which they leave out because they were tuned on pale water.
+    k = _classify(lab)
+    s = cv2.GaussianBlur(lab, (0, 0), 3)
+    k[(s[..., 2] < -.02) & (s[..., 1] < .012) & (s[..., 0] >= .25)] = 3
+    return k
+
+def open_water(L, cover=.4):
+    # The colour of sheets that really are mostly water, so marsh tints inland can't drag the water target toward teal.
+    K = [t.classify(l) for l in L]
+    m = [np.median(l[k == 3], axis=0) for l, k in zip(L, K) if (k == 3).mean() >= cover]
+    return np.median(np.array(m), axis=0) if len(m) >= 3 else None
+
+def level_sheets(T, L, strength=.85, cover=.03, soft=3, water=None):
+    # Shift each sheet's classes toward the cluster's typical values. This acts on whole sheets, so it stays sharp at seams, where evening's wide blur can't reach.
+    K = [t.classify(l) for l in L]; meds = {}
+    for i in range(len(t.CLASSES)):
+        meds[i] = {j: np.median(L[j][K[j] == i], axis=0) for j in range(len(L)) if (K[j] == i).mean() >= cover}
+    out = []
+    for j, l in enumerate(L):
+        o = l.copy()
+        for i, m in meds.items():
+            if j not in m or len(m) < 3: continue
+            tau = np.median(np.array(list(m.values())), axis=0)
+            if i == 3 and water is not None: tau = water
+            w = cv2.GaussianBlur((K[j] == i).astype(np.float32), (0, 0), soft)
+            o += (tau-m[j])[None, None]*strength*w[..., None]
+        out.append(o)
+    return out
+
+def match_wide(T, grid, rows, cols, node=12, along=15, level=True, wide=((.30, .16), (.30, .16), (.16, .09))):
+    # For clusters with big sheet-to-sheet jumps: level whole sheets first, then let early seam rounds accept pairs that disagree a lot.
+    base = [x['lab'] for x in T]; al = (.8, .6, .7, .4)
+    t.classify = classify_wide
+    M = t.fit_global(T, grid, order=3, lam=.005, sigma=2, depths=(2, 5, 9, 15), step=2)
+    L = [t.apply_global(x, m, 3) for x, m in zip(base, M)]
+    w = open_water(L)
+    over = {'water': w} if w is not None else None
+    if level: L = level_sheets(T, L, water=w)
+    for sg in (130, 90, 60):
+        L, _, _ = t.dodge(T, base, L, rows, cols, sigma=sg, alpha=al, over=over)
+    for lim in wide:
+        F = t.fit_bilateral(T, grid, L, along=along, node=node, limits=lim)
+        L = [t.apply_bilateral(a, f) for a, f in zip(L, F)]
+    for _ in range(2):
+        F = t.fit_bilateral(T, grid, L, along=along, node=node)
+        L = [t.apply_bilateral(a, f) for a, f in zip(L, F)]
+    L, _, _ = t.dodge(T, base, L, rows, cols, sigma=45, alpha=tuple(v*.5 for v in al), over=over)
+    for _ in range(4):
+        F = t.fit_bilateral(T, grid, L, along=along, node=node)
+        L = [t.apply_bilateral(a, f) for a, f in zip(L, F)]
+    L = t.water_pass(T, grid, L, along=along, node=node)
+    t.classify = _classify
+    mean_c = lambda X: float(np.mean([np.hypot(x[..., 1], x[..., 2]).mean() for x in X]))
+    s = float(np.clip(mean_c(base)/mean_c(L), .94, 1.12))                      # return to the cluster's own saturation, rather than a fixed trim
+    for x in L: x[..., 1:] *= s
+    return L
+```
+
+### 6_site_tone/cluster.py
+
+Matches one cluster in its own process.
+
+```python
+# Match one cluster plus its stacked editions and write the images. Each runs in its own process and finished clusters are skipped on a rerun.
+import json, os, sys, time, numpy as np, blocks as b
+from blocks import t
+from PIL import Image
+for d in ('clip_tm', 'clip8_tm'): os.makedirs(f'{b.SITE}/{d}', exist_ok=True)
+G, C, Q, rep = b.clusters()
+arg = sys.argv[1]
+done = f'work/c{arg}.json'
+wide = len(sys.argv) > 2 and sys.argv[2] == 'wide'
+if os.path.exists(done) and not wide: print(arg, 'skip'); sys.exit()
+t0 = time.time()
+def stack_out(bbox, top):
+    top_s = rep(bbox); n = 0
+    for s in Q[bbox]:
+        if s['scan'] == top_s['scan']: continue
+        e = b.load_lab(s); b.save(s, t.gamut_map(t.ink_guard(e, b.match_edition(e, top), 6))); n += 1
+    return n
+if arg == 'rest':
+    # Sheets with no neighbours have no seams, so they keep their colour; their other editions still follow them.
+    inmulti = {tuple(C[c]) for g in G if len(g) > 1 for c in g}
+    k = 0; n = 0
+    for bbox in Q:
+        if bbox in inmulti: continue
+        top = b.load_lab(rep(bbox)); b.save(rep(bbox), top); n += stack_out(bbox, top); k += 1
+    json.dump(dict(quads=k, editions=n, sec=round(time.time()-t0)), open(done, 'w')); print('rest', k, 'quads', n, 'editions', flush=True); sys.exit()
+g = G[int(arg)]
+T, grid, rows, cols = b.load_block(g, C, Q, rep); base = [x['lab'] for x in T]
+raw = t.visibility(T, grid, base, off=12); rm = t.metrics(T, grid, base, base)
+L = b.match_wide(T, grid, rows, cols) if wide else b.match(T, grid, rows, cols)
+F = b.finish(base, L, 20 if wide else None)
+v = t.visibility(T, grid, F, off=12); m = t.metrics(T, grid, F, base)
+n = 0
+for x, f in zip(T, F):
+    b.save(x['s'], f); n += stack_out(tuple(x['s']['bbox']), f)
+A = t.mosaic(T, base, rows, cols, 2); B = t.mosaic(T, F, rows, cols, 2)
+S = np.full((A.shape[0], 2*A.shape[1]+24, 3), 255, np.uint8); S[:, :A.shape[1]] = A; S[:, -A.shape[1]:] = B
+w = 1900 if len(g) > 8 else 1000
+Image.fromarray(S).resize((w, max(1, int(w*S.shape[0]/S.shape[1]))), Image.LANCZOS).save(f'qa/c{arg}.png')
+if len(t.edges(grid)) and len(g) >= 8: t.seam_crops(T, grid, F, rows, cols, f'qa/c{arg}_seams.png', size=280)
+st = sorted({x['s']['st'] for x in T})
+r = dict(i=int(arg), wide=wide, sheets=len(g), editions=n, states=st, raw=round(raw['ratio'], 2), raw_worst=round(raw['ratio_worst'], 2), vis=round(v['ratio'], 2), worst=round(v['ratio_worst'], 2), land=[round(rm['land_spread'], 2), round(m['land_spread'], 2)], water=[round(rm['water_spread'], 2), round(m['water_spread'], 2)], chroma=round(m['chroma'], 3), detail=round(m['detail'], 3), sec=round(time.time()-t0))
+json.dump(r, open(done, 'w')); print(r, flush=True)
+```
+
+### 6_site_tone/stage_deploy.py
+
+Builds the deploy folder from finished clusters.
+
+```python
+# Build a deployable copy of the site: finished clusters use matched images, everything else keeps its originals. Same file names, so app.js is unchanged.
+import collections, glob, json, os, shutil, sys
+import blocks as b
+OUT = sys.argv[1]
+HOLD = set()                    # clusters listed here stay on their originals until they pass review
+G, C, Q, rep = b.clusters()
+shutil.rmtree(OUT, ignore_errors=True); os.makedirs(OUT+'/clip'); os.makedirs(OUT+'/clip8')
+for f in ('index.html', '404.html', 'app.js', 'sheets.js', 'chop.png', 'favicon.png', 'og.jpg', 'robots.txt', 'sitemap.xml', '_headers'): shutil.copy2(f'{b.SITE}/{f}', OUT)
+use = {}; count = collections.Counter(); skipped = []
+for i, g in enumerate(G):
+    if len(g) < 2: continue
+    if i in HOLD: count['held for review'] += sum(len(Q[tuple(C[c])]) for c in g); continue
+    if not os.path.exists(f'work/c{i}.json'):
+        skipped.append((i, len(g))); continue
+    for c in g:
+        for s in Q[tuple(C[c])]: use[s['scan']] = 1
+if os.path.exists('work/crest.json'):
+    multi = {tuple(C[c]) for g in G if len(g) > 1 for c in g}
+    for bbox in Q:
+        if bbox in multi: continue
+        top = rep(bbox)['scan']
+        for s in Q[bbox]:
+            if s['scan'] != top: use[s['scan']] = 1     # the top sheet keeps its original, so it isn't JPEG-compressed again
+missing = [s for s in use if not (os.path.exists(f'{b.SITE}/clip8_tm/{s}.jpg') and os.path.exists(f'{b.SITE}/clip_tm/{s}.jpg'))]
+assert not missing, missing[:5]
+for r in b.R:
+    s = r['scan']; d = '_tm' if s in use else ''
+    shutil.copy2(f'{b.SITE}/clip{d}/{s}.jpg', f'{OUT}/clip/{s}.jpg'); shutil.copy2(f'{b.SITE}/clip8{d}/{s}.jpg', f'{OUT}/clip8/{s}.jpg')
+    count['matched' if s in use else 'original'] += 1
+print(dict(count), '| clusters not ready', skipped)
+print('by state, matched', collections.Counter(r['st'] for r in b.R if r['scan'] in use).most_common(12))
+json.dump(sorted(use), open('work/deployed_matched.json', 'w'))
 ```
