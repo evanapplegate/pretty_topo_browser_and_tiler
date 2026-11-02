@@ -7,7 +7,7 @@
 <link rel="icon" href="favicon.png">
 <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/v3.33.0/mapbox-gl.css">
 <style>
-:root{--bg:#fefaf6;--panel:#fefaf6;--ink:#2f2c2c;--mute:#696464;--line:#e6ded5;--hit:#6E5950;--have:#2563eb}
+:root{--bg:#fefaf6;--panel:#fefaf6;--ink:#2f2c2c;--mute:#696464;--line:#e6ded5;--hit:#6E5950}
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
 body{background:var(--bg);color:var(--ink);font:14px/1.35 Optima,"Optima Nova","Linotype Optima",Candara,"Segoe UI",sans-serif;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:minmax(0,1fr);height:100vh;overflow:hidden}
@@ -39,7 +39,6 @@ input{accent-color:var(--hit)}
 .card small{color:var(--mute);font-size:11.5px}
 .card small a{color:#78645C}
 .card:hover,.card.on{border-color:var(--hit)}
-.card.have div::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--have);margin-right:4px}
 #empty{display:none;padding:30px;color:var(--mute);grid-column:1/-1;text-align:center}
 .mapboxgl-popup-content{background:var(--panel);color:var(--ink);padding:8px;border-radius:2px}
 .mapboxgl-ctrl-group{border-radius:2px}
@@ -71,7 +70,7 @@ input{accent-color:var(--hit)}
   <div id="grid"><div id="empty">No sheets match.</div></div>
 </div>
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.33.0/mapbox-gl.js"></script>
-<script src="sheets.js?v=21"></script>
-<script src="app.js?v=21"></script>
+<script src="sheets.js?v=22"></script>
+<script src="app.js?v=22"></script>
 </body>
 </html>

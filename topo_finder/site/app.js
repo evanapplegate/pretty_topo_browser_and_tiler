@@ -129,7 +129,7 @@ function clearHighlight() {
 const grid = $('grid'), cards = new Map();
 for (const s of SHEETS) {
   const a = document.createElement('div');
-  a.className = 'card' + (s.have ? ' have' : '');
+  a.className = 'card';
   a.innerHTML = `<a href="${s.tif}" title="${s.name}, ${s.st} ${s.yr} · 1:${s.scale.toLocaleString()} · download GeoTIFF"><img loading="lazy" src="${s.thumb}" alt="${s.name}, ${s.st} ${s.yr}"></a><div>${s.name}<br><small>${s.st} ${s.yr}</small><br><small>${links(s)}</small></div>`;
   a.addEventListener('mouseenter', () => highlight(s));
   a.addEventListener('mouseleave', clearHighlight);
