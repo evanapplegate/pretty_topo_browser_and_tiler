@@ -5,7 +5,7 @@ from rasterio.enums import Resampling
 from scipy import sparse
 from scipy.interpolate import RectBivariateSpline
 from scipy.ndimage import median_filter
-from scipy.sparse.linalg import splu
+from scipy.sparse.linalg import cg, splu
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 LOSSLESS = '/Users/evanapplegate/Dropbox/freelance/pretty_topo_browser_and_tiler/st_marys_topos/lossless'
@@ -189,7 +189,7 @@ def metrics(T, grid, labs, base):
         chroma.append(np.hypot(lab[..., 1], lab[..., 2]).mean()/np.hypot(b0[..., 1], b0[..., 2]).mean())
         h = lab[..., 0]-cv2.GaussianBlur(lab[..., 0], (0, 0), 6); h0 = b0[..., 0]-cv2.GaussianBlur(b0[..., 0], (0, 0), 6)
         hp.append(h.std()/h0.std())
-    spread = {k: float(np.mean(np.linalg.norm(np.array(v)-np.mean(v, 0), axis=1))*100) for k, v in sp.items()}
+    spread = {k: float(np.mean(np.linalg.norm(np.array(v)-np.mean(v, 0), axis=1))*100) if v else 0. for k, v in sp.items()}
     rgb = [oklab2rgb(l) for l in labs]
     clipped = float(np.mean([((r < 0) | (r > 1)).any(-1).mean() for r in rgb])*100)
     global last_seams; last_seams = sorted(J, key=lambda j: -j[1])
@@ -240,11 +240,13 @@ def dodge(T, base, labs, rows, cols, sigma=180, alpha=(.8, .6, .7, .4), target=N
     # Local tone mapping per class: even out each class's slow drift across the mosaic, leaving real detail alone.
     h, w = labs[0].shape[:2]
     K = canvas(T, [classify(b) for b in labs], rows, cols)[..., 0]             # classify the current estimate, because raw colours differ by sheet
+    K[canvas(T, [np.ones(l.shape[:2], np.uint8) for l in labs], rows, cols)[..., 0] == 0] = -1   # empty grid cells are not forest
     R = canvas(T, base, rows, cols); Rs = cv2.GaussianBlur(R, (0, 0), 3)
     K[(Rs[..., 0] >= .78) & (Rs[..., 2] < .03) & (Rs[..., 1] < .012)] = 3      # pale flats stay water: a drifting estimate must not recruit them into land
     C = canvas(T, labs, rows, cols).astype(np.float32)
     corr = np.zeros_like(C); conf = np.zeros(C.shape[:2], np.float32); total = np.zeros_like(C); targets = {}
     for i, name in enumerate(CLASSES):
+        if not (K == i).any(): continue                                        # a small block can lack a class, and an empty median would poison everything
         m = (K == i).astype(np.float32)
         den = gblur(m, sigma)
         num = np.stack([gblur(C[..., c]*m, sigma) for c in range(3)], -1)
@@ -329,7 +331,7 @@ def seam_tone_delta(a, b, sa, sb, nodes, along, tones=TONES, depths=(2, 4, 7, 11
             D[q, k] = m; C[q, k] = s
     return D, C
 
-def fit_bilateral(T, grid, labs, node=30, along=45, seam_w=30., tone_w=.6, eps=.003, hi_eps=.06, c0=25., tones=TONES, select=None, limits=None):
+def fit_bilateral(T, grid, labs, node=30, along=45, seam_w=30., tone_w=.6, eps=.003, hi_eps=.06, c0=25., tones=TONES, select=None, limits=None, cg_above=450000, cg_tol=2e-3):
     # One colour field per sheet over (y, x, tone), coupled across seams, so bright water and dark forest each get their own correction.
     H, W = labs[0].shape[:2]; ny, nx, nt = H//node+2, W//node+2, len(tones)
     n = len(T); per = ny*nx*nt; N = n*per
@@ -358,8 +360,13 @@ def fit_bilateral(T, grid, labs, node=30, along=45, seam_w=30., tone_w=.6, eps=.
     i = np.concatenate([p[0] for p in pairs]); j = np.concatenate([p[1] for p in pairs]); w = np.concatenate([p[2] for p in pairs])
     leash = np.full(N, eps); leash[(np.arange(N) % nt) >= nt-3] = hi_eps       # highlights stay near zero unless a seam really asks otherwise
     A = sparse.coo_matrix((np.r_[w, w, -w, -w], (np.r_[i, j, i, j], np.r_[i, j, j, i])), shape=(N, N)).tocsc()+sparse.diags(leash, format='csc')
-    lu = splu(A, permc_spec='COLAMD')
-    return np.stack([lu.solve(rhs[:, c]) for c in range(3)], -1).reshape(n, ny, nx, nt, 3).astype(np.float32)
+    if N > cg_above:                                                           # a direct solve gets too slow and too large on big blocks
+        M = sparse.diags(1/A.diagonal()); A = A.tocsr()
+        X = np.stack([cg(A, rhs[:, c], M=M, rtol=cg_tol, maxiter=6000)[0] for c in range(3)], -1)
+    else:
+        lu = splu(A, permc_spec='COLAMD')
+        X = np.stack([lu.solve(rhs[:, c]) for c in range(3)], -1)
+    return X.reshape(n, ny, nx, nt, 3).astype(np.float32)
 
 def apply_bilateral(lab, fld, tones=TONES, weight=None):
     h, w = lab.shape[:2]; nt = fld.shape[2]

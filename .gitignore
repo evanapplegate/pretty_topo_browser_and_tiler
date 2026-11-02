@@ -27,6 +27,9 @@ scripts/3_finder_and_site/ortho_all.json
 # Site images: rebuild with clip_thumbs.py and hires.py
 topo_finder/site/clip/
 topo_finder/site/clip8/
+topo_finder/site/clip_tm/
+topo_finder/site/clip8_tm/
+scripts/*/work/
 topo_finder/blue_green_image_topos_contact.png
 
 # Local

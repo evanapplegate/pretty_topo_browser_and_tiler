@@ -308,7 +308,6 @@ https://prd-tnm.s3.amazonaws.com/StagedProducts/Maps/HistoricalTopo/GeoTIFF/MN/M
 https://prd-tnm.s3.amazonaws.com/StagedProducts/Maps/HistoricalTopo/GeoTIFF/MN/MN_Margie_804916_1970_24000_geo.tif
 https://prd-tnm.s3.amazonaws.com/StagedProducts/Maps/HistoricalTopo/GeoTIFF/MN/MN_Nett%20Lake%20SW_805081_1970_24000_geo.tif
 https://prd-tnm.s3.amazonaws.com/StagedProducts/Maps/HistoricalTopo/GeoTIFF/MN/MN_Norman%20Lake%20SW_805123_1973_24000_geo.tif
-https://prd-tnm.s3.amazonaws.com/StagedProducts/Maps/HistoricalTopo/GeoTIFF/MA/MA_Shirley_351289_1955_25000_geo.tif
 https://prd-tnm.s3.amazonaws.com/StagedProducts/Maps/HistoricalTopo/GeoTIFF/FL/FL_Airplane%20Prairie_344876_1974_24000_geo.tif
 https://prd-tnm.s3.amazonaws.com/StagedProducts/Maps/HistoricalTopo/GeoTIFF/GA/GA_Bemiss_245022_1971_24000_geo.tif
 https://prd-tnm.s3.amazonaws.com/StagedProducts/Maps/HistoricalTopo/GeoTIFF/LA/LA_Lake%20Mongoulois_332500_1973_24000_geo.tif

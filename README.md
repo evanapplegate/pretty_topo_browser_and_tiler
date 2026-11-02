@@ -2,7 +2,7 @@
 
 Tools for finding, stitching and color matching USGS orthophoto-topos: 1:24k maps from the '70s and early '80s that overlay green ink for land and blue for water on aerial imagery.
 
-- **Browser:** [`topo_finder/site`](topo_finder/site) is a static site with a globe of 881 sheets stitched into place, a contact sheet, and a drag-a-box tool that downloads a list of GeoTIFF URLs to `curl`.
+- **Browser:** [`topo_finder/site`](topo_finder/site) is a static site with a globe of 880 sheets stitched into place, a contact sheet, and a drag-a-box tool that downloads a list of GeoTIFF URLs to `curl`.
 - **Tiler:** [`scripts`](scripts/README.md) clips sheets at their printed neatlines, stitches them to BigTIFF and matches color across sheets.
 
 ## Docs
