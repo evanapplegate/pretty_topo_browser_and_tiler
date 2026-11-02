@@ -1,0 +1,10 @@
+app.displayDialogs = DialogModes.NO;
+var P='/Users/evanapplegate/Dropbox/freelance/pretty_topo_browser_and_tiler/nw_fl_topos/FL_Bruce_IndianPass_1982_24000_sheets.psb';
+var d=app.documents.getByName('FL_Bruce_IndianPass_1982_24000_sheets.psb'); app.activeDocument=d;
+var s=new ActionDescriptor(), o=new ActionDescriptor();
+o.putBoolean(stringIDToTypeID('maximizeCompatibility'),false);
+s.putObject(charIDToTypeID('As  '),stringIDToTypeID('largeDocumentFormat'),o);
+s.putPath(charIDToTypeID('In  '),File(P));
+s.putBoolean(charIDToTypeID('LwCs'),true);
+executeAction(charIDToTypeID('save'),s,DialogModes.NO);
+'saved '+d.saved+' '+d.name;

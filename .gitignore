@@ -1,0 +1,37 @@
+# Source sheets, clips and mosaics: rebuild with the scripts
+*_geo_tif/
+clipped/
+louisiana_topos/
+nw_fl_topos/
+st_marys_topos/
+
+# Heavy formats, anywhere
+*.tif
+*.tiff
+*.psd
+*.psb
+*.raw
+*.vrt
+*.zip
+*.pkl
+*.npz
+*.mp4
+
+# Script working files
+scripts/*/qa/
+scripts/*/work/
+scripts/*/psd_tmp/
+scripts/3_finder_and_site/ortho_all.json
+
+# Site images: rebuild with clip_thumbs.py and hires.py
+topo_finder/site/clip/
+topo_finder/site/clip8/
+topo_finder/blue_green_image_topos_contact.png
+
+# Local
+.DS_Store
+.claude/
+.wrangler/
+__pycache__/
+node_modules/
+*.log

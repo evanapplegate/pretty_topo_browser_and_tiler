@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orthophoto-topos</title>
+<link rel="icon" href="favicon.png">
+<link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/v3.33.0/mapbox-gl.css">
+<style>
+:root{--bg:#fefaf6;--panel:#fefaf6;--ink:#2f2c2c;--mute:#696464;--line:#e6ded5;--hit:#6E5950;--have:#2563eb}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.35 Optima,"Optima Nova","Linotype Optima",Candara,"Segoe UI",sans-serif;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:minmax(0,1fr);height:100vh;overflow:hidden}
+#left{position:relative;min-width:0;min-height:0}
+#map{position:absolute;inset:0;background:var(--bg)}
+#readout{position:absolute;z-index:500;left:10px;right:10px;bottom:22px;background:rgba(254,250,246,.96);border:1px solid var(--line);border-radius:2px;padding:7px 10px;pointer-events:none;display:none}
+#readout b{font-weight:600}
+#readout span{color:var(--mute);margin-left:8px;font-variant-numeric:tabular-nums}
+#drag{display:none;position:absolute;inset:0;z-index:450;cursor:crosshair;touch-action:none}
+#band{display:none;position:absolute;border:2px solid var(--hit);background:rgba(110,89,80,.14)}
+#tools{position:absolute;z-index:500;top:10px;right:10px;display:flex;flex-direction:column;gap:6px;align-items:flex-end}
+#tools button{font:inherit;padding:6px 10px;color:var(--ink);background:rgba(254,250,246,.96);border:1px solid var(--hit);border-radius:2px;cursor:pointer}
+#tools button.on,#tools #getBtn{color:#fff;background:var(--hit)}
+#tools button:disabled{color:var(--mute);background:rgba(254,250,246,.96);border-color:var(--line);cursor:default}
+#right{display:flex;flex-direction:column;min-width:0;min-height:0;border-left:1px solid var(--line);background:var(--panel)}
+header{padding:10px 12px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+h1{display:inline;font-size:inherit;margin:0;font-weight:600}
+#intro{flex-basis:100%;line-height:1.4}
+#intro a{color:#78645C}
+.chop{display:inline-block;height:1em;vertical-align:middle;filter:brightness(0) invert(1) brightness(.49)}
+#count{color:var(--mute);margin-right:auto;font-variant-numeric:tabular-nums}
+label{display:inline-flex;gap:4px;align-items:center;color:var(--mute)}
+select{font:inherit;padding:2px 4px;background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:2px}
+input{accent-color:var(--hit)}
+#grid{flex:1;min-height:0;overflow-y:auto;padding:8px;display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:6px;align-content:start;grid-auto-rows:max-content}
+.card{background:var(--bg);border:2px solid transparent;border-radius:2px;overflow:hidden}
+.card img{display:block;width:100%;aspect-ratio:200/233;object-fit:cover;background:#efe8e0}
+.card div{padding:3px 5px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px}
+.card small{color:var(--mute);font-size:11.5px}
+.card small a{color:#78645C}
+.card:hover,.card.on{border-color:var(--hit)}
+.card.have div::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--have);margin-right:4px}
+#empty{display:none;padding:30px;color:var(--mute);grid-column:1/-1;text-align:center}
+.mapboxgl-popup-content{background:var(--panel);color:var(--ink);padding:8px;border-radius:2px}
+.mapboxgl-ctrl-group{border-radius:2px}
+.mapboxgl-popup-tip{display:none}
+.pop{width:160px;font-size:12px}
+.pop img{width:100%;display:block;margin-bottom:5px}
+.pop a{font-weight:600;color:#78645C}
+</style>
+</head>
+<body>
+<div id="left">
+  <div id="map"></div>
+  <div id="drag"><div id="band"></div></div>
+  <div id="tools">
+    <button id="boxBtn" type="button">Drag a box, get a list of S3-hosted TIFFs to curl</button>
+    <button id="getBtn" type="button" hidden></button>
+  </div>
+  <div id="readout"></div>
+</div>
+<div id="right">
+  <header>
+    <div id="intro"><h1>Orthophoto-topos:</h1> in the late '70s, early '80s the U.S. Geological Survey made lovely 1:24k topos by overlaying green ink for land, blue for water over aerial imagery. Here’s a browser of these editions specifically, +/- some false positives, each with an S3 link to the full GeoTIFF. For more topos use <a href="https://ngmdb.usgs.gov/topoview/viewer/#5/34.922/-89.253" target="_blank" rel="noopener">TopoView</a>. Another cute map project by <a href="https://evanapplegate.com" target="_blank" rel="noopener">Evan Applegate</a>. <a href="https://evanapplegate.com" target="_blank" rel="noopener" aria-label="evanapplegate.com"><img src="chop.png" alt="" class="chop"></a></div>
+    <span id="count"></span>
+    <label>State <select id="state"><option value="">All</option></select></label>
+    <label>Sort <select id="sort"><option value="dist">Match</option><option value="st">State</option><option value="yr">Year</option><option value="west">West to east</option></select></label>
+    <label><input type="checkbox" id="earliest" checked> Earliest year only</label>
+    <label><input type="checkbox" id="inview" checked> In map view</label>
+  </header>
+  <div id="grid"><div id="empty">No sheets match.</div></div>
+</div>
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.33.0/mapbox-gl.js"></script>
+<script src="sheets.js?v=21"></script>
+<script src="app.js?v=21"></script>
+</body>
+</html>

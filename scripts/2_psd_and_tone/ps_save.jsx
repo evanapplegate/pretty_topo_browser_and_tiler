@@ -1,0 +1,10 @@
+app.displayDialogs = DialogModes.NO;
+var P='/Users/evanapplegate/Dropbox/freelance/pretty_topo_browser_and_tiler/FL_CapeCanaveral_1976_24000_sheets.psd';
+var d=app.documents.getByName('FL_CapeCanaveral_1976_24000_sheets.psd'); app.activeDocument=d;
+var s=new ActionDescriptor(), o=new ActionDescriptor();
+o.putBoolean(stringIDToTypeID('maximizeCompatibility'),true);
+s.putObject(charIDToTypeID('As  '),charIDToTypeID('Pht3'),o);
+s.putPath(charIDToTypeID('In  '),File(P));
+s.putBoolean(charIDToTypeID('LwCs'),true);
+executeAction(charIDToTypeID('save'),s,DialogModes.NO);
+'saved '+d.saved+' '+d.name;

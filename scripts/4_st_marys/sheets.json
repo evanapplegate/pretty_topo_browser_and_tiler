@@ -1,0 +1,119 @@
+[
+ {
+  "scan": 246097,
+  "name": "Kingsland",
+  "st": "GA",
+  "yr": 1980,
+  "bbox": [
+   -81.75,
+   30.75,
+   -81.625,
+   30.875
+  ],
+  "tif": "https://prd-tnm.s3.amazonaws.com/StagedProducts/Maps/HistoricalTopo/GeoTIFF/GA/GA_Kingsland_246097_1980_24000_geo.tif"
+ },
+ {
+  "scan": 247296,
+  "name": "Woodbine",
+  "st": "GA",
+  "yr": 1979,
+  "bbox": [
+   -81.75,
+   30.875,
+   -81.625,
+   31.0
+  ],
+  "tif": "https://prd-tnm.s3.amazonaws.com/StagedProducts/Maps/HistoricalTopo/GeoTIFF/GA/GA_Woodbine_247296_1979_24000_geo.tif"
+ },
+ {
+  "scan": 246098,
+  "name": "Kingsland NE",
+  "st": "GA",
+  "yr": 1979,
+  "bbox": [
+   -81.625,
+   30.875,
+   -81.5,
+   31.0
+  ],
+  "tif": "https://prd-tnm.s3.amazonaws.com/StagedProducts/Maps/HistoricalTopo/GeoTIFF/GA/GA_Kingsland%20NE_246098_1979_24000_geo.tif"
+ },
+ {
+  "scan": 245861,
+  "name": "Harrietts Bluff",
+  "st": "GA",
+  "yr": 1980,
+  "bbox": [
+   -81.625,
+   30.75,
+   -81.5,
+   30.875
+  ],
+  "tif": "https://prd-tnm.s3.amazonaws.com/StagedProducts/Maps/HistoricalTopo/GeoTIFF/GA/GA_Harrietts%20Bluff_245861_1980_24000_geo.tif"
+ },
+ {
+  "scan": 245463,
+  "name": "Cumberland Island South",
+  "st": "GA",
+  "yr": 1979,
+  "bbox": [
+   -81.5,
+   30.75,
+   -81.375,
+   30.875
+  ],
+  "tif": "https://prd-tnm.s3.amazonaws.com/StagedProducts/Maps/HistoricalTopo/GeoTIFF/GA/GA_Cumberland%20Island%20South_245463_1979_24000_geo.tif"
+ },
+ {
+  "scan": 245457,
+  "name": "Cumberland Island North",
+  "st": "GA",
+  "yr": 1979,
+  "bbox": [
+   -81.5,
+   30.875,
+   -81.375,
+   31.0
+  ],
+  "tif": "https://prd-tnm.s3.amazonaws.com/StagedProducts/Maps/HistoricalTopo/GeoTIFF/GA/GA_Cumberland%20Island%20North_245457_1979_24000_geo.tif"
+ },
+ {
+  "scan": 346530,
+  "name": "Gross",
+  "st": "FL",
+  "yr": 1979,
+  "bbox": [
+   -81.75,
+   30.625,
+   -81.625,
+   30.75
+  ],
+  "tif": "https://prd-tnm.s3.amazonaws.com/StagedProducts/Maps/HistoricalTopo/GeoTIFF/FL/FL_Gross_346530_1979_24000_geo.tif"
+ },
+ {
+  "scan": 246994,
+  "name": "St Marys",
+  "st": "GA",
+  "yr": 1979,
+  "bbox": [
+   -81.625,
+   30.625,
+   -81.5,
+   30.75
+  ],
+  "tif": "https://prd-tnm.s3.amazonaws.com/StagedProducts/Maps/HistoricalTopo/GeoTIFF/GA/GA_St%20Marys_246994_1979_24000_geo.tif"
+ },
+ {
+  "scan": 346144,
+  "name": "Fernandina Beach",
+  "st": "FL",
+  "yr": 1981,
+  "bbox": [
+   -81.5,
+   30.625,
+   -81.375,
+   30.75
+  ],
+  "tif": "https://prd-tnm.s3.amazonaws.com/StagedProducts/Maps/HistoricalTopo/GeoTIFF/FL/FL_Fernandina%20Beach_346144_1981_24000_geo.tif"
+ }
+]
