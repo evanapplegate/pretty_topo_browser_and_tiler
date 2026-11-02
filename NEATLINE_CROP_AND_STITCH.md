@@ -6,8 +6,10 @@ The scripts are in [scripts/](scripts/README.md), with the run order.
 
 - **Method:** the steps from raw sheet to mosaic, starting at [Why a plain clip doesn't work](#why-a-plain-clip-doesnt-work).
 - **[St Marys block](#st-marys-block-stitch-and-tone-match):** a full log of the 9-sheet stitch and tone match, including what failed.
+- **[Cape Canaveral tone match](#cape-canaveral-tone-match):** the same method on a water-heavy block, and what had to change.
+- **[Learnings](#learnings):** what carries over to the next block.
 - **[Earlier color matching](#earlier-color-matching):** the Selective Color work on the first three sets.
-- **[Appendix](#appendix-st-marys-scripts):** the St Marys scripts in full.
+- **[Appendix](#appendix-scripts):** the St Marys and Canaveral scripts in full.
 
 The short version: don't clip to the coordinates the metadata gives you. Measure where the neatline was actually printed on each scan, warp each sheet so that line lands exactly on the quad edge, and resample every sheet onto one shared grid so seams fall on pixel boundaries.
 
@@ -392,7 +394,7 @@ Those figures come from the last candidate build, before the final render.
 - **Detail:** the matched image keeps a median 97% of local contrast, because bringing mismatched sheets together compresses some of it.
 - **Different dates:** sheets span 1979 to 1981. Tones are matched, not the landscape or the tide.
 - **Masks are color-based:** the class map uses fixed thresholds tuned on this block, so another block would need them rechecked.
-- **Not a full rerun:** the delivered file came from the last `run9.py` output and `render.py`. `tone.py` was only changed in `ink_guard` after that, and `run9.py` afterward only in its preview call, so the code below matches what produced it, but the chain hasn't been rerun from scratch.
+- **Not a full rerun:** the delivered file came from the last `run9.py` output and `render.py`, and the chain hasn't been rerun from scratch. Since then, `tone.py` has gained the optional `select`, `limits` and `weight` arguments and `water_pass` for Canaveral, and `band_profile` now handles incomplete grids. None of those change the St Marys path, whose defaults are unchanged, and `run9.py` changed only in its preview call.
 - **Earlier runs:** `run1.py` to `run8.py`, `diag.py` and `diag2.py` were written against earlier states of `tone.py` and may not reproduce the table above.
 - **Dead code:** `tone.py` keeps superseded functions for those runs, such as `fit_field`, `pipeline`, `stack` and `finish`.
 
@@ -445,6 +447,127 @@ python3 -W ignore seamqa.py
 
 `render.py` reads `work/final_q.npz`, which `run9.py` writes.
 
+## Cape Canaveral tone match
+
+The 6 Cape Canaveral sheets were redone with the St Marys tone mapping, to test how well it carries to a different kind of block.
+
+| File | Size | Notes |
+|---|---|---|
+| `canaveral_topos/FL_CapeCanaveral_1976_24000_mosaic_tonemapped.tif` | 672 MB | The deliverable: lossless DEFLATE, BigTIFF, COG |
+| `canaveral_topos/FL_CapeCanaveral_1976_24000_mosaic_lossless.tif` | 662 MB | Raw neatline stitch on the same grid |
+| `canaveral_topos/before_after.png` | | Side by side from those two files |
+| `canaveral_topos/lossless/` | | Lossless clips, used as color input |
+| `canaveral_topos/matched/` | | Lossless color-matched clips |
+
+Both mosaics are 12,072 × 20,448 px, 3-band 8-bit, EPSG:4267, covering 80.75° to 80.5° W and 28.25° to 28.625° N. The earlier `FL_CapeCanaveral_1976_24000_mosaic_matched.tif` was left alone.
+
+### How this block differs
+
+- **Input:** the source sheets are gone, so this starts from the clips. `clipped/` holds JPEG versions, but the lossless originals had survived in a temp folder. Same grid, and they differ from the JPEGs by 2.0 to 2.5 levels of compression noise, so the lossless ones were used and saved to `canaveral_topos/lossless/`.
+- **Mostly water:** about 58% of the block by the class map, and strongly blue (b around -0.03 to -0.09) rather than pale.
+- **Seams run through water:** the Banana River and the ocean cross most of them.
+- **Worse to start:** seam visibility 4.54 raw, against 2.69 for St Marys. Water makes seams stand out, because there's so little content to hide them.
+
+### Runs
+
+**Run 1, St Marys settings unchanged.** Seam visibility fell to 1.03, worst seam 1.23. The overview was strong, but seam crops showed a dark rectangle of water at the Courtenay corner in the Banana River, with hard edges. Smaller versions showed at the Cocoa Beach marsh and the Crawlerway canal.
+
+The cause was the St Marys flats fix. It rejects bright pairs that disagree by more than 0.035 in lightness or 0.02 in color, to stop near-white materials being confused. Here that test threw out the real water differences, and the leash on the top tone nodes held back what was left. So the solver simply ignored those seams.
+
+**Run 2, plus a water-only seam pass.** `water_pass` in `tone.py` adds 3 rounds on top of run 1:
+
+- **Pairs:** cool pixels only (b < -0.004 on both sides), with limits loosened to |ΔL| < 0.16 and |Δab| < 0.09.
+- **Leash:** the highlight leash drops to 0.003.
+- **Applied through a soft mask:** weight rises from b = 0 to b = -0.018, so land keeps its own correction.
+
+| Run | Visibility | Worst | Seam p90 | Courtenay / Cape Canaveral p90 | Land | Water |
+|---|---|---|---|---|---|---|
+| Raw | 4.54 | 11.42 | 15.27 | | 3.88 | 3.17 |
+| 1 | 1.03 | 1.23 | 8.33 | 13.7 | 1.20 | 1.01 |
+| 2 round 1 | 0.95 | 1.25 | 5.94 | | 1.20 | 1.00 |
+| 2 round 2 | 0.92 | 1.21 | 5.85 | | 1.20 | 1.04 |
+| 2 round 3 | 0.91 | 1.19 | 5.79 | 2.2 | 1.20 | 1.08 |
+
+Each round cost a little water spread, so it stopped at 3.
+
+### Final verification
+
+Read from the delivered BigTIFFs by `5_canaveral/verify.py`. The Selective Color column is the older `..._mosaic_matched.tif`, scored the same way.
+
+| Check | Raw | Selective Color | Tone mapped |
+|---|---|---|---|
+| Seam visibility | 4.54 | 3.58 | 0.91 |
+| Worst seam | 11.45 | 5.82 | 1.21 |
+| Land spread | 3.88 | 0.67 | 1.24 |
+| Water spread | 3.16 | 0.49 | 1.07 |
+| Chroma | 1.000 | 0.969 | 0.997 |
+| Quarter-scale detail | 1.000 | 0.988 | 0.953 |
+
+| Other | Result |
+|---|---|
+| File header | `II+` (BigTIFF), COG, DEFLATE, overviews 2 to 64 |
+| Grid | Identical to the raw stitch |
+| Seam step against control | 8.33 / 2.63 raw, 2.15 / 2.62 matched |
+| Fine detail kept at native pixels | 98% median, 93% to 100% across sheets |
+| Full-resolution render vs quarter-scale target | 0.10 to 0.22 median |
+| Pixels at the edge of the sRGB gamut | 0.20% |
+| Render time | 11 to 15 seconds per sheet, 3 at a time |
+
+Native-pixel crops at seam junctions show no color step, and blue contours held their color here.
+
+### Known limits
+
+- **Print texture:** Courtenay's water has a coarser grain than its neighbors. Tone matched, grain didn't.
+- **Worst seam:** Orsino / False Cape at 1.21. Most of what's left is line offsets and real features.
+- **Sheet averages:** further apart than the Selective Color version. See the first learning below.
+- **Thresholds:** the class rules weren't retuned. Deep water off False Cape falls into "other" and gets a blended correction, which worked here.
+- **Not rerun end to end** after the water pass moved into `tone.py`, except `run2.py`, which reproduced its output exactly (max difference 0.0). The render and BigTIFFs came from that same data.
+
+### Commands
+
+From `scripts/5_canaveral/`, with the lossless clips in `canaveral_topos/lossless/`:
+
+```bash
+python3 -W ignore run1.py
+python3 -W ignore run2.py
+python3 -W ignore render_block.py
+```
+
+Then build each mosaic with `gdalbuildvrt` and `gdal_translate` as in the St Marys commands, from `lossless/` to `..._mosaic_lossless.tif` and from `matched/` to `..._mosaic_tonemapped.tif`, and run `python3 -W ignore verify.py`.
+
+## Learnings
+
+What carries over to the next block.
+
+### Color
+
+- **Seams and sheet averages are different problems.** On Canaveral, Selective Color got sheet colors closer together than tone mapping did (land spread 0.67 against 1.24) and still left obvious seams (3.58 against 0.91). A sheet-wide adjustment can match averages, but a seam is a local mismatch along one line.
+- **Solve seams jointly, by tone, and separately for water.** Water and forest need different fixes at the same spot, and on Canaveral, water and land at the same brightness did too. One offset per sheet or one field for everything wasn't enough.
+- **Protections need the right scope.** The pair limits that saved St Marys near-white flats caused Canaveral's dark rectangle. The danger is low-chroma near-white, not brightness as such, so saturated water needs its own rules.
+- **Don't let a classifier feed on its own output.** Reclassifying each pass is needed because raw colors differ by sheet, but it can run away, so pin what the raw image makes certain.
+- **Keep evening broad.** Sigma 60 (about 490 m) scored best and erased real landscape. Sigma 90 and up was the limit here.
+- **Printed inks aren't terrain.** Sand, roads, town tint and blue lines need protecting, or land corrections quietly grey and muddy them. On Canaveral the blue test also catches 26% to 93% of pixels per sheet, which was harmless (visibility 1.02 to 1.03) only because it keeps the local shift rather than the raw color.
+- **Trim saturation last.** Matching adds some, and a uniform scale of 0.965 brought it back near the original.
+
+### Checking
+
+- **Look at 1:1 at seam junctions before calling it done.** Pink flats and grey contours passed every number and were invisible in overviews.
+- **Use seam visibility, not raw step size.** Raw step counts real features, so it stops improving while the seams keep getting better. Comparing with control lines inside each sheet fixes that.
+- **Use the exaggerated view for gestalt.** Sheet-shaped patches show up at 3.5× contrast long before a metric finds them.
+- **A better number can be a worse picture.** Run 7 had the best scores and was too green, flat and muddy. Keep the score honest and let the picture decide.
+- **Trace a defect through each stage.** The pink flats' first explanation was wrong. Printing one patch's color after every step found the real cause in minutes.
+- **Measure the delivered file.** Reading back the final BigTIFF catches anything that happened after the working copy.
+
+### Process
+
+- **On a new block, run the settings unchanged first.** It shows exactly what breaks. Canaveral needed one addition, not a retune.
+- **Keep lossless clips somewhere durable.** Canaveral's sources were gone, and its lossless clips survived only by luck in a temp folder. Tone mapping JPEG clips would compress everything twice.
+- **Never fork after OpenCV has run threads.** On macOS the workers segfault in `cv2.resize` and the pool hangs, with a crash dialog for each worker. Run the color build and the render as separate processes.
+- **Plan solver size.** A direct seam solve took 10 to 20 seconds per round at about 185,000 unknowns per color channel. A 32-sheet block at the same grid would reach about 1,000,000, which is untested, so it probably needs an iterative solver or a coarser grid.
+- **zsh doesn't split variables into words.** Options stored in a variable reach `gdal_translate` as one argument, so write them out.
+- **A stopped command may have partly run.** One reported as rejected had already moved a folder, committed and created a GitHub repo. Check the disk and the remote before redoing anything.
+- **Check the account before publishing.** Wrangler here was logged in to a work account while the personal Pages project lived elsewhere.
+
 ## Earlier color matching
 
 The Cape Canaveral, Louisiana and NW Florida sets were matched inside Photoshop rather than by tone mapping, so the result stays editable as layers.
@@ -463,11 +586,13 @@ The Cape Canaveral, Louisiana and NW Florida sets were matched inside Photoshop 
 
 These figures are CIELAB ΔE to the target and aren't comparable with the OKLab numbers above. A slider acts on a whole tile, so it can't fix gradients within one, which is why the St Marys block moved to tone mapping.
 
-## Appendix: St Marys scripts
+Cape Canaveral was later redone with tone mapping. See [its section](#cape-canaveral-tone-match) for both versions scored the same way.
 
-The complete working set, verbatim from `scripts/4_st_marys/`, in run order. `sheets.json`, `neatline.json` and the iteration scripts are in that folder.
+## Appendix: scripts
 
-### measure.py
+The complete working sets, verbatim, in run order. `sheets.json`, `neatline.json` and the iteration scripts are in `scripts/4_st_marys/`.
+
+### 4_st_marys/measure.py
 
 Measure the printed neatline on every edge.
 
@@ -550,7 +675,7 @@ for f in sorted(glob.glob(SRC+'/*.tif')):
 json.dump(res,open(OUT,'w'),indent=1)
 ```
 
-### clip.py
+### 4_st_marys/clip.py
 
 Warp each sheet onto the shared grid.
 
@@ -610,7 +735,7 @@ for f in sorted(glob.glob(SRC+'/*.tif')):
     print(name, 'stroke %.2f' % stroke, p, os.path.getsize(p)//1048576, 'MB')
 ```
 
-### tone.py
+### 4_st_marys/tone.py
 
 The color library: every step of the match, plus the metrics.
 
@@ -921,13 +1046,15 @@ def tone_basis(L, tones=TONES):
     i = np.searchsorted(tones, L, side='right')-1
     return i, (L-tones[i])/(tones[i+1]-tones[i])
 
-def seam_tone_delta(a, b, sa, sb, nodes, along, tones=TONES, depths=(2, 4, 7, 11, 16), blur=1.5):
+def seam_tone_delta(a, b, sa, sb, nodes, along, tones=TONES, depths=(2, 4, 7, 11, 16), blur=1.5, select=None, limits=None):
     # Across-seam offset per position and per tone, using only pairs that look like the same material.
     ba = cv2.GaussianBlur(a, (0, 0), blur); bb = cv2.GaussianBlur(b, (0, 0), blur)
     A = np.stack([strip(ba, sa, d) for d in depths], 1); B = np.stack([strip(bb, sb, d) for d in depths], 1)
     d = A-B; L = (A[..., 0]+B[..., 0])/2
     hi = smooth(L, .70, .85)                                                   # near white, everything looks alike, so demand a closer match
     ok = (np.abs(d[..., 0]) < .09-.055*hi) & (np.hypot(d[..., 1], d[..., 2]) < .05-.03*hi)
+    if limits: ok = (np.abs(d[..., 0]) < limits[0]) & (np.hypot(d[..., 1], d[..., 2]) < limits[1])
+    if select: ok &= select(A) & select(B)
     pos = np.repeat(np.arange(A.shape[0])[:, None], len(depths), 1)
     i, f = tone_basis(L)
     D = np.zeros((len(nodes), len(tones), 3), np.float32); C = np.zeros((len(nodes), len(tones)), np.float32)
@@ -944,7 +1071,7 @@ def seam_tone_delta(a, b, sa, sb, nodes, along, tones=TONES, depths=(2, 4, 7, 11
             D[q, k] = m; C[q, k] = s
     return D, C
 
-def fit_bilateral(T, grid, labs, node=30, along=45, seam_w=30., tone_w=.6, eps=.003, hi_eps=.06, c0=25., tones=TONES):
+def fit_bilateral(T, grid, labs, node=30, along=45, seam_w=30., tone_w=.6, eps=.003, hi_eps=.06, c0=25., tones=TONES, select=None, limits=None):
     # One colour field per sheet over (y, x, tone), coupled across seams, so bright water and dark forest each get their own correction.
     H, W = labs[0].shape[:2]; ny, nx, nt = H//node+2, W//node+2, len(tones)
     n = len(T); per = ny*nx*nt; N = n*per
@@ -962,7 +1089,7 @@ def fit_bilateral(T, grid, labs, node=30, along=45, seam_w=30., tone_w=.6, eps=.
         sa, sb = ('E', 'W') if k == 'h' else ('S', 'N')
         m = ny if k == 'h' else nx; L = H if k == 'h' else W
         nodes = np.linspace(0, L-1, m)
-        D, C = seam_tone_delta(labs[ia], labs[ib], sa, sb, nodes, along)
+        D, C = seam_tone_delta(labs[ia], labs[ib], sa, sb, nodes, along, select=select, limits=limits)
         w = seam_w*np.clip(C/c0, 0, 1)
         q, t = np.meshgrid(np.arange(m), np.arange(nt), indexing='ij')
         p1 = idx(ia, q, nx-1, t) if k == 'h' else idx(ia, ny-1, q, t)
@@ -976,7 +1103,7 @@ def fit_bilateral(T, grid, labs, node=30, along=45, seam_w=30., tone_w=.6, eps=.
     lu = splu(A, permc_spec='COLAMD')
     return np.stack([lu.solve(rhs[:, c]) for c in range(3)], -1).reshape(n, ny, nx, nt, 3).astype(np.float32)
 
-def apply_bilateral(lab, fld, tones=TONES):
+def apply_bilateral(lab, fld, tones=TONES, weight=None):
     h, w = lab.shape[:2]; nt = fld.shape[2]
     ys = np.linspace(0, fld.shape[0]-1, h, dtype=np.float32); xs = np.linspace(0, fld.shape[1]-1, w, dtype=np.float32)
     mx, my = np.meshgrid(xs, ys)
@@ -986,7 +1113,8 @@ def apply_bilateral(lab, fld, tones=TONES):
         if not m.any(): continue
         lo = cv2.remap(fld[:, :, k], mx, my, cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
         hi = cv2.remap(fld[:, :, k+1], mx, my, cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
-        out[m] += lo[m]*(1-f[m])[:, None]+hi[m]*f[m][:, None]
+        d = lo[m]*(1-f[m])[:, None]+hi[m]*f[m][:, None]
+        out[m] += d if weight is None else d*weight[m][:, None]
     return out
 
 def visibility(T, grid, labs, off=24):
@@ -1019,16 +1147,17 @@ def stack(T, grid, base, rows, cols, order=3, lam=.005, sigmas=(260, 180, 120), 
 def band_profile(T, labs, tag=''):
     # Forest and clearing lightness against distance from a sheet edge; a flat line means no band along the seams.
     bins = [0, 15, 40, 80, 140, 220, 320]; out = {}
+    cells = {x['rc'] for x in T}
     for name, cl in (('forest', 0), ('clearing', 1)):
         vs = []
         for x, l in zip(T, labs):
             r, c = x['rc']; K = classify(l); h, w = l.shape[:2]
             yy, xx = np.mgrid[0:h, 0:w]
             d = np.full((h, w), 1e9, np.float32)
-            if r > 0: d = np.minimum(d, yy)
-            if r < 2: d = np.minimum(d, h-1-yy)
-            if c > 0: d = np.minimum(d, xx)
-            if c < 2: d = np.minimum(d, w-1-xx)
+            if (r-1, c) in cells: d = np.minimum(d, yy)
+            if (r+1, c) in cells: d = np.minimum(d, h-1-yy)
+            if (r, c-1) in cells: d = np.minimum(d, xx)
+            if (r, c+1) in cells: d = np.minimum(d, w-1-xx)
             row = []
             for a, b in zip(bins, bins[1:]):
                 m = (K == cl) & (d >= a) & (d < b)
@@ -1084,11 +1213,22 @@ def trim(L, chroma=.965):
     o = [l.copy() for l in L]
     for x in o: x[..., 1:] *= chroma
     return o
+
+def water_mask(lab):
+    return smooth(-cv2.GaussianBlur(lab, (0, 0), 1)[..., 2], .0, .018)
+
+def water_pass(T, grid, L, rounds=3, limits=(.16, .09), along=30, node=24):
+    # For blocks with saturated water: seam solve on cool pixels only, with looser limits, applied through a soft water mask so land keeps its own correction.
+    cool = lambda c: c[..., 2] < -.004
+    for _ in range(rounds):
+        F = fit_bilateral(T, grid, L, along=along, node=node, hi_eps=.003, select=cool, limits=limits)
+        L = [apply_bilateral(a, f, weight=water_mask(a)) for a, f in zip(L, F)]
+    return L
 ```
 
-### run9.py
+### 4_st_marys/run9.py
 
-The final color build. It writes `work/final_q.npz`.
+The final St Marys color build. It writes `work/final_q.npz`.
 
 ```python
 # Rebuild with pale flats pinned and inks guarded, then recheck the two defects.
@@ -1112,7 +1252,7 @@ Image.fromarray(t.mosaic(T, G, rows, cols, 2)).resize((1103, 1278), Image.LANCZO
 t.seam_crops(T, grid, G, rows, cols, 'qa/run9_seams.png')
 ```
 
-### render.py
+### 4_st_marys/render.py
 
 The full-resolution render.
 
@@ -1166,6 +1306,7 @@ def one(args):
         o.colorinterp = [rasterio.enums.ColorInterp.red, rasterio.enums.ColorInterp.green, rasterio.enums.ColorInterp.blue]
     return name, round(miss, 3), round(time.time()-t0)
 
+# Keep this in its own process, apart from the colour build: OpenCV's threads do not survive a fork on macOS, and forked workers segfault.
 if __name__ == '__main__':
     os.makedirs(OUT, exist_ok=True)
     T, grid, rows, cols = t.load()
@@ -1175,9 +1316,9 @@ if __name__ == '__main__':
         for r in p.imap_unordered(one, jobs): print(r, flush=True)
 ```
 
-### verify.py
+### 4_st_marys/verify.py
 
-Checks on the delivered files.
+Checks on the delivered St Marys files.
 
 ```python
 # Verify the finished file itself: format, grid, seams and detail, reading only from the delivered BigTIFFs.
@@ -1219,7 +1360,7 @@ for i, (x, y) in enumerate(pts):
 O.save('qa/final_native.png'); print(O.size)
 ```
 
-### seamqa.py
+### 4_st_marys/seamqa.py
 
 Seam QA on the raw mosaic.
 
@@ -1252,4 +1393,132 @@ for r in range(3):
             al[f'r{r}c{c} NS-neighbours'] = shift(a[y-4:y-1].mean(0), a[y+1:y+4].mean(0))
 v = np.array([s for x in al.values() for s in x])
 print('seams', len(dips), 'worst darkening', round(max(dips), 1), '| offset blocks', len(v), 'median %+.1f p50|s| %.1f p90|s| %.1f max|s| %d px' % (np.median(v), np.median(abs(v)), np.percentile(abs(v), 90), abs(v).max()))
+```
+
+### 5_canaveral/cfg.py
+
+Points the color library at another block. Start here for a new one.
+
+```python
+# Point the St Marys colour library at the Cape Canaveral clips; sheet bounds come from the clips themselves.
+import glob, os, sys
+import rasterio
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE+'/../4_st_marys')
+import tone as t
+DATA = os.path.abspath(HERE+'/../../canaveral_topos')
+t.LOSSLESS = DATA+'/lossless'
+t.SHEETS = {}
+for f in glob.glob(t.LOSSLESS+'/*.tif'):
+    p = os.path.basename(f).split('_')
+    with rasterio.open(f) as d:
+        b = d.bounds
+    t.SHEETS[int(p[2])] = dict(scan=int(p[2]), name=p[1], st=p[0], yr=int(p[3]), bbox=[round(b.left, 6), round(b.bottom, 6), round(b.right, 6), round(b.top, 6)])
+```
+
+### 5_canaveral/run1.py
+
+The St Marys settings, unchanged.
+
+```python
+# The latest St Marys settings, unchanged, on the six Canaveral sheets.
+import numpy as np, cv2, cfg
+from cfg import t
+from PIL import Image
+T, grid, rows, cols = t.load(); base = [x['lab'] for x in T]
+L = t.trim(t.stack2(T, grid, base, rows, cols, rounds=(3, 4), sigmas=((260, 180, 120), (90,)), finish=.5))
+np.savez('work/final_q.npz', **{str(x['s']['scan']): l.astype(np.float32) for x, l in zip(T, L)})
+V = [t.ink_guard(b, l, 3) for b, l in zip(base, L)]
+print('raw', {k: round(v, 2) for k, v in t.visibility(T, grid, base).items()}); print('run', {k: round(v, 2) for k, v in t.visibility(T, grid, V).items()})
+print({a: (round(b, 3) if isinstance(b, float) else b) for a, b in t.metrics(T, grid, V, base).items() if a != 'worst'})
+for q in t.last_seams[:7]: print('  %-22s med %.1f p90 %.1f' % (q[2], q[0], q[1]))
+print('band raw', t.band_profile(T, base)); print('band run', t.band_profile(T, V), flush=True)
+G = [t.gamut_map(v) for v in V]
+a = t.mosaic(T, base, rows, cols, 2); b = t.mosaic(T, G, rows, cols, 2)
+S = np.full((a.shape[0], 2*a.shape[1]+24, 3), 255, np.uint8); S[:, :a.shape[1]] = a; S[:, -a.shape[1]:] = b
+Image.fromarray(S).resize((1760, int(1760*S.shape[0]/S.shape[1])), Image.LANCZOS).save('qa/run1_ba.png')
+Image.fromarray(b).save('qa/run1.png')
+t.seam_crops(T, grid, G, rows, cols, 'qa/run1_seams.png')
+```
+
+### 5_canaveral/run2.py
+
+Adds the water-only seam pass.
+
+```python
+# Add the water-only seam pass to the run1 result, then preview it.
+import numpy as np, cfg
+from cfg import t
+from PIL import Image
+T, grid, rows, cols = t.load(); base = [x['lab'] for x in T]
+Z = np.load('work/final_q.npz'); L = [Z[str(x['s']['scan'])].astype(np.float32) for x in T]
+L = t.water_pass(T, grid, L)
+print({k: round(v, 2) for k, v in t.visibility(T, grid, L).items()}, {a: round(b, 3) for a, b in t.metrics(T, grid, L, base).items() if a in ('seam_med', 'seam_p90', 'land_spread', 'water_spread', 'chroma', 'detail')}, flush=True)
+for q in t.last_seams[:7]: print('  %-22s med %.1f p90 %.1f' % (q[2], q[0], q[1]))
+np.savez('work/final2_q.npz', **{str(x['s']['scan']): l.astype(np.float32) for x, l in zip(T, L)})
+G = [t.gamut_map(t.ink_guard(b, l, 3)) for b, l in zip(base, L)]
+b = t.mosaic(T, G, rows, cols, 2); Image.fromarray(b).resize((880, int(880*b.shape[0]/b.shape[1])), Image.LANCZOS).save('qa/run2.png')
+t.seam_crops(T, grid, G, rows, cols, 'qa/run2_seams.png')
+```
+
+### 5_canaveral/render_block.py
+
+Runs the renderer on this block, in its own process.
+
+```python
+# Full-resolution render of the Canaveral sheets with the St Marys renderer, in its own process so OpenCV threads never meet a fork.
+import multiprocessing as mp, numpy as np, cfg, render
+from cfg import t
+if __name__ == '__main__':
+    render.OUT = cfg.DATA+'/matched'
+    T, grid, rows, cols = t.load()
+    Z = np.load('work/final2_q.npz')
+    jobs = [(x['s']['name'], x['f'], x['lab'], Z[str(x['s']['scan'])].astype(np.float32)) for x in T]
+    with mp.get_context('fork').Pool(3) as p:
+        for r in p.imap_unordered(render.one, jobs): print(r, flush=True)
+```
+
+### 5_canaveral/verify.py
+
+Checks on the delivered Canaveral files.
+
+```python
+# Check the delivered BigTIFFs directly: format, grid, seam visibility, detail, and native-pixel crops at seam junctions.
+import numpy as np, cv2, rasterio, cfg
+from cfg import t
+from rasterio.windows import Window
+from rasterio.enums import Resampling
+from PIL import Image
+A = cfg.DATA+'/FL_CapeCanaveral_1976_24000_mosaic_lossless.tif'; B = cfg.DATA+'/FL_CapeCanaveral_1976_24000_mosaic_tonemapped.tif'
+print('magic', open(B, 'rb').read(4), '(II+ is BigTIFF)')
+a = rasterio.open(A); b = rasterio.open(B)
+print(b.crs.to_string(), b.width, b.height, b.count, b.dtypes[0], b.compression.name, b.tags(ns='IMAGE_STRUCTURE').get('LAYOUT'), 'overviews', b.overviews(1))
+print('same grid as raw', a.transform.almost_equals(b.transform, 1e-12) and a.shape == b.shape, '| bounds', [round(x, 4) for x in b.bounds])
+CW, CH = 6036, 6816; F = 4
+qa = np.moveaxis(a.read(out_shape=(3, a.height//F, a.width//F), resampling=Resampling.average), 0, -1).astype(np.float32)/255
+qb = np.moveaxis(b.read(out_shape=(3, b.height//F, b.width//F), resampling=Resampling.average), 0, -1).astype(np.float32)/255
+T, grid, rows, cols = t.load(); h, w = T[0]['lab'].shape[:2]
+la = t.cut(T, t.rgb2oklab(qa).astype(np.float32), rows, cols, h, w); lb = t.cut(T, t.rgb2oklab(qb).astype(np.float32), rows, cols, h, w)
+print('raw    ', {k: round(v, 2) for k, v in t.visibility(T, grid, la).items()})
+print('matched', {k: round(v, 2) for k, v in t.visibility(T, grid, lb).items()})
+m = t.metrics(T, grid, lb, la); print({k: (round(v, 3) if isinstance(v, float) else v) for k, v in m.items() if k != 'worst'})
+print('raw spread', {k: round(v, 3) for k, v in t.metrics(T, grid, la, la).items() if 'spread' in k})
+R = []
+for r in range(rows):
+    for c in range(cols):
+        win = Window(c*CW+CW//2-1024, r*CH+CH//2-1024, 2048, 2048)
+        x = cv2.cvtColor(np.moveaxis(a.read(window=win), 0, -1), cv2.COLOR_RGB2GRAY).astype(np.float32); y = cv2.cvtColor(np.moveaxis(b.read(window=win), 0, -1), cv2.COLOR_RGB2GRAY).astype(np.float32)
+        hp = lambda i: (i-cv2.GaussianBlur(i, (0, 0), 3)).std()
+        R.append(hp(y)/hp(x))
+print('native detail kept min %.3f median %.3f max %.3f' % (min(R), float(np.median(R)), max(R)))
+pts = [(CW, CH), (CW, 2*CH), (CW, CH//2), (CW, int(1.35*CH)), (int(.5*CW), CH), (int(1.5*CW), CH), (int(1.2*CW), 2*CH)]
+S = 330; O = Image.new('RGB', (len(pts)*(S+4), 2*S+4), 'white')
+for i, (x, y) in enumerate(pts):
+    for k, d in enumerate((a, b)):
+        c = np.moveaxis(d.read(window=Window(x-S//2, y-S//2, S, S)), 0, -1)
+        O.paste(Image.fromarray(c), (i*(S+4), k*(S+4)))
+O.save('qa/final_native.png')
+ra = np.moveaxis(a.read(out_shape=(3, 1704, 1006), resampling=Resampling.average), 0, -1); rb = np.moveaxis(b.read(out_shape=(3, 1704, 1006), resampling=Resampling.average), 0, -1)
+S2 = np.full((1704, 2032, 3), 255, np.uint8); S2[:, :1006] = ra; S2[:, -1006:] = rb
+Image.fromarray(S2).save(cfg.DATA+'/before_after.png')
 ```

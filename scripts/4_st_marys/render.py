@@ -47,6 +47,7 @@ def one(args):
         o.colorinterp = [rasterio.enums.ColorInterp.red, rasterio.enums.ColorInterp.green, rasterio.enums.ColorInterp.blue]
     return name, round(miss, 3), round(time.time()-t0)
 
+# Keep this in its own process, apart from the colour build: OpenCV's threads do not survive a fork on macOS, and forked workers segfault.
 if __name__ == '__main__':
     os.makedirs(OUT, exist_ok=True)
     T, grid, rows, cols = t.load()

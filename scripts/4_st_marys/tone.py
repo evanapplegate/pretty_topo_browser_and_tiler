@@ -304,13 +304,15 @@ def tone_basis(L, tones=TONES):
     i = np.searchsorted(tones, L, side='right')-1
     return i, (L-tones[i])/(tones[i+1]-tones[i])
 
-def seam_tone_delta(a, b, sa, sb, nodes, along, tones=TONES, depths=(2, 4, 7, 11, 16), blur=1.5):
+def seam_tone_delta(a, b, sa, sb, nodes, along, tones=TONES, depths=(2, 4, 7, 11, 16), blur=1.5, select=None, limits=None):
     # Across-seam offset per position and per tone, using only pairs that look like the same material.
     ba = cv2.GaussianBlur(a, (0, 0), blur); bb = cv2.GaussianBlur(b, (0, 0), blur)
     A = np.stack([strip(ba, sa, d) for d in depths], 1); B = np.stack([strip(bb, sb, d) for d in depths], 1)
     d = A-B; L = (A[..., 0]+B[..., 0])/2
     hi = smooth(L, .70, .85)                                                   # near white, everything looks alike, so demand a closer match
     ok = (np.abs(d[..., 0]) < .09-.055*hi) & (np.hypot(d[..., 1], d[..., 2]) < .05-.03*hi)
+    if limits: ok = (np.abs(d[..., 0]) < limits[0]) & (np.hypot(d[..., 1], d[..., 2]) < limits[1])
+    if select: ok &= select(A) & select(B)
     pos = np.repeat(np.arange(A.shape[0])[:, None], len(depths), 1)
     i, f = tone_basis(L)
     D = np.zeros((len(nodes), len(tones), 3), np.float32); C = np.zeros((len(nodes), len(tones)), np.float32)
@@ -327,7 +329,7 @@ def seam_tone_delta(a, b, sa, sb, nodes, along, tones=TONES, depths=(2, 4, 7, 11
             D[q, k] = m; C[q, k] = s
     return D, C
 
-def fit_bilateral(T, grid, labs, node=30, along=45, seam_w=30., tone_w=.6, eps=.003, hi_eps=.06, c0=25., tones=TONES):
+def fit_bilateral(T, grid, labs, node=30, along=45, seam_w=30., tone_w=.6, eps=.003, hi_eps=.06, c0=25., tones=TONES, select=None, limits=None):
     # One colour field per sheet over (y, x, tone), coupled across seams, so bright water and dark forest each get their own correction.
     H, W = labs[0].shape[:2]; ny, nx, nt = H//node+2, W//node+2, len(tones)
     n = len(T); per = ny*nx*nt; N = n*per
@@ -345,7 +347,7 @@ def fit_bilateral(T, grid, labs, node=30, along=45, seam_w=30., tone_w=.6, eps=.
         sa, sb = ('E', 'W') if k == 'h' else ('S', 'N')
         m = ny if k == 'h' else nx; L = H if k == 'h' else W
         nodes = np.linspace(0, L-1, m)
-        D, C = seam_tone_delta(labs[ia], labs[ib], sa, sb, nodes, along)
+        D, C = seam_tone_delta(labs[ia], labs[ib], sa, sb, nodes, along, select=select, limits=limits)
         w = seam_w*np.clip(C/c0, 0, 1)
         q, t = np.meshgrid(np.arange(m), np.arange(nt), indexing='ij')
         p1 = idx(ia, q, nx-1, t) if k == 'h' else idx(ia, ny-1, q, t)
@@ -359,7 +361,7 @@ def fit_bilateral(T, grid, labs, node=30, along=45, seam_w=30., tone_w=.6, eps=.
     lu = splu(A, permc_spec='COLAMD')
     return np.stack([lu.solve(rhs[:, c]) for c in range(3)], -1).reshape(n, ny, nx, nt, 3).astype(np.float32)
 
-def apply_bilateral(lab, fld, tones=TONES):
+def apply_bilateral(lab, fld, tones=TONES, weight=None):
     h, w = lab.shape[:2]; nt = fld.shape[2]
     ys = np.linspace(0, fld.shape[0]-1, h, dtype=np.float32); xs = np.linspace(0, fld.shape[1]-1, w, dtype=np.float32)
     mx, my = np.meshgrid(xs, ys)
@@ -369,7 +371,8 @@ def apply_bilateral(lab, fld, tones=TONES):
         if not m.any(): continue
         lo = cv2.remap(fld[:, :, k], mx, my, cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
         hi = cv2.remap(fld[:, :, k+1], mx, my, cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
-        out[m] += lo[m]*(1-f[m])[:, None]+hi[m]*f[m][:, None]
+        d = lo[m]*(1-f[m])[:, None]+hi[m]*f[m][:, None]
+        out[m] += d if weight is None else d*weight[m][:, None]
     return out
 
 def visibility(T, grid, labs, off=24):
@@ -402,16 +405,17 @@ def stack(T, grid, base, rows, cols, order=3, lam=.005, sigmas=(260, 180, 120), 
 def band_profile(T, labs, tag=''):
     # Forest and clearing lightness against distance from a sheet edge; a flat line means no band along the seams.
     bins = [0, 15, 40, 80, 140, 220, 320]; out = {}
+    cells = {x['rc'] for x in T}
     for name, cl in (('forest', 0), ('clearing', 1)):
         vs = []
         for x, l in zip(T, labs):
             r, c = x['rc']; K = classify(l); h, w = l.shape[:2]
             yy, xx = np.mgrid[0:h, 0:w]
             d = np.full((h, w), 1e9, np.float32)
-            if r > 0: d = np.minimum(d, yy)
-            if r < 2: d = np.minimum(d, h-1-yy)
-            if c > 0: d = np.minimum(d, xx)
-            if c < 2: d = np.minimum(d, w-1-xx)
+            if (r-1, c) in cells: d = np.minimum(d, yy)
+            if (r+1, c) in cells: d = np.minimum(d, h-1-yy)
+            if (r, c-1) in cells: d = np.minimum(d, xx)
+            if (r, c+1) in cells: d = np.minimum(d, w-1-xx)
             row = []
             for a, b in zip(bins, bins[1:]):
                 m = (K == cl) & (d >= a) & (d < b)
@@ -467,3 +471,14 @@ def trim(L, chroma=.965):
     o = [l.copy() for l in L]
     for x in o: x[..., 1:] *= chroma
     return o
+
+def water_mask(lab):
+    return smooth(-cv2.GaussianBlur(lab, (0, 0), 1)[..., 2], .0, .018)
+
+def water_pass(T, grid, L, rounds=3, limits=(.16, .09), along=30, node=24):
+    # For blocks with saturated water: seam solve on cool pixels only, with looser limits, applied through a soft water mask so land keeps its own correction.
+    cool = lambda c: c[..., 2] < -.004
+    for _ in range(rounds):
+        F = fit_bilateral(T, grid, L, along=along, node=node, hi_eps=.003, select=cool, limits=limits)
+        L = [apply_bilateral(a, f, weight=water_mask(a)) for a, f in zip(L, F)]
+    return L

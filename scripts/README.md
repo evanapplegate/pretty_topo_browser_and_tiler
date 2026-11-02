@@ -113,6 +113,32 @@ Run steps 4 to 7 from inside this folder, because `work/` and `qa/` are relative
 
 `tone.py` is the shared library. `sheets.json` holds the sheet list, including the quad bounds. `run1.py` to `run8.py`, `diag.py` and `diag2.py` are the iteration history and were written against earlier states of `tone.py`, so they may not reproduce those results.
 
+## 5_canaveral
+
+The 6 Cape Canaveral sheets, tone mapped with the library in `4_st_marys`. The log is in [its section](../NEATLINE_CROP_AND_STITCH.md#cape-canaveral-tone-match).
+
+| Order | Script | What it does |
+|---|---|---|
+| 1 | `cfg.py` | Not run directly: points the library at this block's clips, reading bounds from the files |
+| 2 | `run1.py` | The St Marys settings, unchanged; writes `work/final_q.npz` |
+| 3 | `run2.py` | Adds the water-only seam pass; writes `work/final2_q.npz` |
+| 4 | `render_block.py` | Full-resolution render from `work/final2_q.npz` |
+| 5 | `gdalbuildvrt`, `gdal_translate` | Builds the two mosaics |
+| 6 | `verify.py` | Checks the delivered files |
+
+Run from inside this folder.
+
+## Tone mapping a new block
+
+1. Save lossless clips first, in a permanent folder.
+2. Copy `5_canaveral`, and change `DATA` in `cfg.py`.
+3. Run `run1.py` unchanged and look at the seam crops in `qa/`.
+4. If water steps remain at seams, run `run2.py`. If not, point `render_block.py` at `work/final_q.npz`.
+5. Render, build the BigTIFFs, and set `CW`, `CH` and the file names in `verify.py`.
+6. Check the native-pixel crops in `qa/final_native.png` by eye. Numbers have passed real defects here.
+
+Run the color build and render as separate processes. Forking after OpenCV has run threads crashes on macOS. Lessons behind these steps are under [Learnings](../NEATLINE_CROP_AND_STITCH.md#learnings).
+
 ## Site
 
 The site itself is in `../topo_finder/site`. To run it locally:

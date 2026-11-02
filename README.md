@@ -7,7 +7,7 @@ Tools for finding, stitching and color matching USGS orthophoto-topos: 1:24k map
 
 ## Docs
 
-- [NEATLINE_CROP_AND_STITCH.md](NEATLINE_CROP_AND_STITCH.md): the full method, results and iteration log, with the St Marys scripts in full.
+- [NEATLINE_CROP_AND_STITCH.md](NEATLINE_CROP_AND_STITCH.md): the full method, results, iteration log and learnings, with the key scripts in full.
 - [scripts/README.md](scripts/README.md): setup and run order.
 
 ## Layout
@@ -19,7 +19,8 @@ Tools for finding, stitching and color matching USGS orthophoto-topos: 1:24k map
 | `scripts/1_clip_and_stitch/` | Neatline measuring, clipping, seam checks |
 | `scripts/2_psd_and_tone/` | Layered PSD/PSB building and Selective Color matching |
 | `scripts/3_finder_and_site/` | The thumbnail color scan and the site's data and images |
-| `scripts/4_st_marys/` | The 9-sheet BigTIFF stitch and tone mapping |
+| `scripts/4_st_marys/` | The 9-sheet BigTIFF stitch and the tone-mapping library |
+| `scripts/5_canaveral/` | The same tone mapping on a water-heavy block, and the template for new blocks |
 
 ## What isn't here
 
