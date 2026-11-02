@@ -2,14 +2,14 @@
 import collections, glob, json, os, shutil, sys
 import blocks as b
 OUT = sys.argv[1]
-KEEP_RAW = {18}                 # a line map beside an image map: matching them only damaged both
+HOLD = {0, 1}                   # Minnesota and Florida stay on their originals until they pass review
 G, C, Q, rep = b.clusters()
 shutil.rmtree(OUT, ignore_errors=True); os.makedirs(OUT+'/clip'); os.makedirs(OUT+'/clip8')
 for f in ('index.html', 'app.js', 'sheets.js', 'chop.png', 'favicon.png'): shutil.copy2(f'{b.SITE}/{f}', OUT)
 use = {}; count = collections.Counter(); skipped = []
 for i, g in enumerate(G):
     if len(g) < 2: continue
-    if i in KEEP_RAW: count['kept raw on purpose'] += sum(len(Q[tuple(C[c])]) for c in g); continue
+    if i in HOLD: count['held for review'] += sum(len(Q[tuple(C[c])]) for c in g); continue
     if not os.path.exists(f'work/c{i}.json'):
         skipped.append((i, len(g))); continue
     for c in g:

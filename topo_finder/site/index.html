@@ -41,7 +41,14 @@ input{accent-color:var(--hit)}
 .card:hover,.card.on{border-color:var(--hit)}
 #empty{display:none;padding:30px;color:var(--mute);grid-column:1/-1;text-align:center}
 .mapboxgl-popup-content{background:var(--panel);color:var(--ink);padding:8px;border-radius:2px}
-.mapboxgl-ctrl-group{border-radius:2px}
+.mapboxgl-ctrl-group{border-radius:2px;background:rgba(254,250,246,.96);border:1px solid var(--hit)}
+.mapboxgl-ctrl-group:not(:empty){box-shadow:none}
+.mapboxgl-ctrl-group button:first-of-type,.mapboxgl-ctrl-group button:last-child{border-radius:0}
+.mapboxgl-ctrl-group button+button{border-top:1px solid var(--hit)}
+.mapboxgl-ctrl-group button:not(:disabled):hover{background-color:rgba(110,89,80,.12)}
+.mapboxgl-ctrl-group button:focus:focus-visible{box-shadow:inset 0 0 0 1px var(--hit)}
+.mapboxgl-ctrl button.mapboxgl-ctrl-zoom-in .mapboxgl-ctrl-icon{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 10v12M10 16h12' stroke='%236E5950' stroke-width='1.5' fill='none'/%3E%3C/svg%3E")}
+.mapboxgl-ctrl button.mapboxgl-ctrl-zoom-out .mapboxgl-ctrl-icon{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M10 16h12' stroke='%236E5950' stroke-width='1.5' fill='none'/%3E%3C/svg%3E")}
 .mapboxgl-popup-tip{display:none}
 .pop{width:160px;font-size:12px}
 .pop img{width:100%;display:block;margin-bottom:5px}
